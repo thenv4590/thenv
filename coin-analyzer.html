@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memecoin Analyzer — Nên Mua hay Bán?</title>
+<style>
+  :root {
+    --bg-page: #0a0b10;
+    --bg-card: #111827;
+    --bg-elevated: #1a1e2e;
+    --bg-input: #0d1117;
+    --cyan: #06b6d4;
+    --green: #22c55e;
+    --yellow: #eab308;
+    --orange: #f97316;
+    --red: #ef4444;
+    --purple: #a855f7;
+    --blue: #3b82f6;
+    --text-primary: #f1f5f9;
+    --text-body: #94a3b8;
+    --text-muted: #64748b;
+    --border: rgba(255,255,255,0.08);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Inter, system-ui, -apple-system, sans-serif;
+    background: var(--bg-page); color: var(--text-primary);
+    line-height: 1.6; min-height: 100vh;
+  }
+  .container { max-width: 900px; margin: 0 auto; padding: 24px 16px 60px; }
+
+  /* Header */
+  .header { text-align: center; margin-bottom: 32px; padding: 32px 0; border-bottom: 1px solid var(--border); }
+  .header h1 {
+    font-size: 28px; font-weight: 700;
+    background: linear-gradient(135deg, var(--cyan), var(--blue));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+  }
+  .header p { color: var(--text-muted); font-size: 14px; }
+
+  /* DexScreener Import */
+  .dex-import {
+    background: linear-gradient(135deg, rgba(6,182,212,0.08), rgba(59,130,246,0.08));
+    border: 1px solid rgba(6,182,212,0.2);
+    border-radius: 14px; padding: 24px; margin-bottom: 24px;
+  }
+  .dex-import h3 { font-size: 15px; margin-bottom: 4px; color: var(--cyan); }
+  .dex-import .sub { font-size: 12px; color: var(--text-muted); margin-bottom: 14px; }
+  .dex-row { display: flex; gap: 10px; }
+  .dex-row input {
+    flex: 1; background: var(--bg-input); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 16px; color: var(--text-primary);
+    font-size: 14px; outline: none; transition: border-color 0.2s;
+  }
+  .dex-row input:focus { border-color: var(--cyan); box-shadow: 0 0 0 2px rgba(6,182,212,0.15); }
+  .dex-row input::placeholder { color: var(--text-muted); }
+  .fetch-btn {
+    padding: 12px 28px; border: none; border-radius: 10px;
+    background: linear-gradient(135deg, var(--cyan), var(--blue));
+    color: #fff; font-weight: 700; font-size: 14px;
+    cursor: pointer; transition: all 0.2s; white-space: nowrap;
+  }
+  .fetch-btn:hover { box-shadow: 0 4px 20px rgba(6,182,212,0.3); transform: translateY(-1px); }
+  .fetch-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+  .fetch-status {
+    margin-top: 12px; font-size: 13px; min-height: 20px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .fetch-status.loading { color: var(--cyan); }
+  .fetch-status.success { color: var(--green); }
+  .fetch-status.error { color: var(--red); }
+  .spin { display: inline-block; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Auto-filled indicator */
+  .auto-tag {
+    display: inline-block; font-size: 10px; padding: 1px 6px;
+    background: rgba(6,182,212,0.15); color: var(--cyan);
+    border-radius: 4px; margin-left: 6px; vertical-align: middle;
+    font-weight: 600; letter-spacing: 0.3px;
+  }
+
+  /* Sections */
+  .section {
+    background: var(--bg-card); border-radius: 12px;
+    border: 1px solid var(--border); margin-bottom: 20px; overflow: hidden;
+  }
+  .section-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 16px 20px; cursor: pointer; user-select: none; transition: background 0.2s;
+  }
+  .section-header:hover { background: rgba(255,255,255,0.02); }
+  .section-icon {
+    width: 36px; height: 36px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0;
+  }
+  .section-header h2 { font-size: 16px; font-weight: 600; flex: 1; }
+  .section-header .chevron { color: var(--text-muted); transition: transform 0.3s; font-size: 12px; }
+  .section-header.collapsed .chevron { transform: rotate(-90deg); }
+  .section-body { padding: 0 20px 20px; transition: all 0.3s ease; }
+  .section-body.hidden { display: none; }
+
+  /* Form */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } .dex-row { flex-direction: column; } }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field > label { font-size: 13px; color: var(--text-body); font-weight: 500; }
+  .field > label .hint { font-weight: 400; color: var(--text-muted); font-size: 11px; }
+  .field input, .field select {
+    background: var(--bg-input); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px; color: var(--text-primary);
+    font-size: 14px; outline: none; transition: border-color 0.2s; width: 100%;
+  }
+  .field input:focus, .field select:focus { border-color: var(--cyan); box-shadow: 0 0 0 2px rgba(6,182,212,0.15); }
+  .field input::placeholder { color: var(--text-muted); }
+  .field input.auto-filled { border-color: rgba(6,182,212,0.3); background: rgba(6,182,212,0.04); }
+
+  /* Toggle */
+  .toggle-group { display: flex; gap: 8px; flex-wrap: wrap; }
+  .toggle-btn {
+    padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--bg-input); color: var(--text-body);
+    cursor: pointer; font-size: 13px; transition: all 0.2s;
+  }
+  .toggle-btn:hover { border-color: var(--cyan); color: var(--text-primary); }
+  .toggle-btn.active {
+    background: rgba(6,182,212,0.15); border-color: var(--cyan);
+    color: var(--cyan); font-weight: 600;
+  }
+
+  /* Checklist */
+  .checklist { display: flex; flex-direction: column; gap: 10px; }
+  .check-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px; background: var(--bg-input); border-radius: 8px;
+    border: 1px solid var(--border); cursor: pointer;
+    transition: all 0.2s; font-size: 14px; color: var(--text-body);
+  }
+  .check-item:hover { border-color: rgba(255,255,255,0.15); }
+  .check-box {
+    width: 20px; height: 20px; border: 2px solid var(--text-muted);
+    border-radius: 5px; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; transition: all 0.2s; font-size: 12px; color: transparent;
+  }
+  .check-item.checked .check-box { background: var(--green); border-color: var(--green); color: #fff; }
+  .check-item.checked { border-color: rgba(34,197,94,0.3); color: var(--text-primary); }
+  .check-item.is-red.checked .check-box { background: var(--red); border-color: var(--red); }
+  .check-item.is-red.checked { border-color: rgba(239,68,68,0.3); }
+
+  /* Buttons */
+  .analyze-btn {
+    width: 100%; padding: 16px; border: none; border-radius: 12px;
+    font-size: 16px; font-weight: 700; cursor: pointer;
+    background: linear-gradient(135deg, var(--cyan), var(--blue));
+    color: #fff; transition: all 0.3s; margin-top: 8px; letter-spacing: 0.5px;
+  }
+  .analyze-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 30px rgba(6,182,212,0.3); }
+  .analyze-btn:active { transform: translateY(0); }
+
+  /* Results */
+  #results { display: none; }
+  #results.show { display: block; }
+  .result-verdict {
+    text-align: center; padding: 40px 24px; border-radius: 16px;
+    margin-bottom: 24px; position: relative; overflow: hidden;
+  }
+  .result-verdict::before {
+    content: ''; position: absolute; inset: 0; border-radius: 16px; padding: 2px;
+    background: linear-gradient(135deg, var(--cyan), var(--blue));
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+  }
+  .verdict-icon { font-size: 56px; margin-bottom: 12px; }
+  .verdict-label { font-size: 14px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 4px; }
+  .verdict-text { font-size: 32px; font-weight: 800; margin-bottom: 8px; }
+  .verdict-sub { font-size: 15px; color: var(--text-body); max-width: 600px; margin: 0 auto; }
+
+  /* Token Header (result) */
+  .token-header {
+    display: flex; align-items: center; gap: 16px;
+    padding: 16px 20px; background: var(--bg-card);
+    border-radius: 12px; border: 1px solid var(--border);
+    margin-bottom: 20px;
+  }
+  .token-header img { width: 48px; height: 48px; border-radius: 50%; background: var(--bg-elevated); }
+  .token-header .info { flex: 1; }
+  .token-header .name { font-size: 18px; font-weight: 700; }
+  .token-header .chain-badge {
+    font-size: 11px; padding: 2px 8px; border-radius: 4px;
+    background: rgba(168,85,247,0.15); color: var(--purple);
+    font-weight: 600; text-transform: uppercase; margin-left: 8px;
+  }
+  .token-header .price { font-size: 20px; font-weight: 700; text-align: right; }
+  .token-header .price-change { font-size: 13px; text-align: right; }
+
+  /* Score Ring */
+  .score-ring-wrap { display: flex; justify-content: center; gap: 32px; flex-wrap: wrap; margin: 24px 0; }
+  .score-item { text-align: center; }
+  .score-ring { width: 100px; height: 100px; position: relative; }
+  .score-ring svg { transform: rotate(-90deg); }
+  .score-ring circle { fill: none; stroke-width: 6; }
+  .score-ring .bg { stroke: var(--bg-elevated); }
+  .score-ring .fg { stroke-linecap: round; transition: stroke-dashoffset 1s ease; }
+  .score-val { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; }
+  .score-label { margin-top: 8px; font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+
+  /* Breakdown */
+  .breakdown { display: flex; flex-direction: column; gap: 12px; }
+  .breakdown-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px; background: var(--bg-input);
+    border-radius: 8px; border-left: 3px solid var(--text-muted);
+  }
+  .breakdown-row .label { flex: 1; font-size: 14px; color: var(--text-body); }
+  .breakdown-row .bar-wrap { width: 120px; height: 6px; background: var(--bg-elevated); border-radius: 3px; overflow: hidden; }
+  .breakdown-row .bar-fill { height: 100%; border-radius: 3px; transition: width 0.8s ease; }
+  .breakdown-row .val { font-size: 14px; font-weight: 600; min-width: 40px; text-align: right; }
+
+  /* Rec cards */
+  .rec-card { padding: 16px 20px; border-radius: 10px; border-left: 4px solid; margin-bottom: 12px; background: var(--bg-card); }
+  .rec-card h4 { font-size: 14px; margin-bottom: 6px; }
+  .rec-card p { font-size: 13px; color: var(--text-body); }
+
+  /* Tranche Table */
+  .tranche-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
+  .tranche-table th { text-align: left; padding: 10px 12px; color: var(--text-muted); font-weight: 600; border-bottom: 1px solid var(--border); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tranche-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text-body); }
+  .tranche-table tr:last-child td { border-bottom: none; }
+  .tranche-table .highlight { color: var(--cyan); font-weight: 600; }
+
+  /* Exit Plan */
+  .exit-steps { display: flex; flex-direction: column; gap: 0; margin-top: 12px; }
+  .exit-step { display: flex; align-items: stretch; gap: 16px; }
+  .exit-step-line { display: flex; flex-direction: column; align-items: center; width: 32px; flex-shrink: 0; }
+  .exit-dot { width: 14px; height: 14px; border-radius: 50%; border: 3px solid var(--cyan); background: var(--bg-page); flex-shrink: 0; z-index: 1; }
+  .exit-line-seg { width: 2px; flex: 1; background: var(--border); }
+  .exit-step:last-child .exit-line-seg { display: none; }
+  .exit-content { padding: 2px 0 20px; font-size: 14px; }
+  .exit-content strong { color: var(--text-primary); }
+  .exit-content span { color: var(--text-muted); font-size: 13px; }
+
+  /* Warn */
+  .warn-box { display: flex; gap: 12px; padding: 14px 18px; border-radius: 10px; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); margin-top: 12px; font-size: 13px; color: var(--text-body); line-height: 1.5; }
+  .warn-box.info { background: rgba(6,182,212,0.08); border-color: rgba(6,182,212,0.2); }
+  .warn-box .icon { font-size: 20px; flex-shrink: 0; }
+
+  /* Quick Stats */
+  .quick-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .stat-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; text-align: center; }
+  .stat-card .stat-val { font-size: 18px; font-weight: 700; margin-bottom: 2px; }
+  .stat-card .stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* Reset */
+  .reset-btn { display: block; margin: 24px auto 0; padding: 12px 40px; border: 1px solid var(--border); border-radius: 10px; background: transparent; color: var(--text-muted); font-size: 14px; cursor: pointer; transition: all 0.2s; }
+  .reset-btn:hover { border-color: var(--text-body); color: var(--text-primary); }
+
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+  .animate-in { animation: fadeUp 0.5s ease forwards; }
+  .sep { height: 1px; background: var(--border); margin: 20px 0; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h1>Memecoin Analyzer</h1>
+    <p>Dán link DexScreener để tự động lấy dữ liệu — Đưa ra khuyến nghị MUA / GIỮ / BÁN</p>
+  </div>
+
+  <!-- INPUT FORM -->
+  <div id="inputForm">
+
+    <!-- DexScreener Import -->
+    <div class="dex-import">
+      <h3>🔗 Import từ DexScreener</h3>
+      <div class="sub">Dán link coin từ dexscreener.com — Tự động điền Market Cap, Liquidity, Volume, Tuổi token, Social...</div>
+      <div class="dex-row">
+        <input type="text" id="dexUrl" placeholder="https://dexscreener.com/solana/ABC123... hoặc token address">
+        <button type="button" class="fetch-btn" id="fetchBtn" onclick="fetchDex()">🔍 Lấy dữ liệu</button>
+      </div>
+      <div class="fetch-status" id="fetchStatus"></div>
+    </div>
+
+    <!-- Section 1: Token Info -->
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)">
+        <div class="section-icon" style="background:rgba(6,182,212,0.15);color:var(--cyan)">📊</div>
+        <h2>Thông tin Token</h2>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="section-body">
+        <div class="form-grid">
+          <div class="field">
+            <label>Tên Token / Ticker</label>
+            <input type="text" id="tokenName" placeholder="VD: PEPE, DOGE...">
+          </div>
+          <div class="field">
+            <label>Vốn hóa thị trường (USD)</label>
+            <input type="number" id="marketCap" placeholder="VD: 500000">
+          </div>
+          <div class="field">
+            <label>Thanh khoản (USD)</label>
+            <input type="number" id="liquidity" placeholder="VD: 50000">
+          </div>
+          <div class="field">
+            <label>Khối lượng giao dịch 24h (USD)</label>
+            <input type="number" id="volume24h" placeholder="VD: 120000">
+          </div>
+          <div class="field">
+            <label>Tuổi Token <span class="hint">(phút kể từ ra mắt)</span></label>
+            <input type="number" id="tokenAge" placeholder="VD: 30">
+          </div>
+          <div class="field">
+            <label>Số người nắm giữ</label>
+            <input type="number" id="holders" placeholder="VD: 200">
+          </div>
+          <div class="field">
+            <label>Top 10 ví lớn nắm giữ (%)</label>
+            <input type="number" id="top10Pct" placeholder="VD: 45" min="0" max="100">
+          </div>
+          <div class="field">
+            <label>Biến động giá 24h (%)</label>
+            <input type="number" id="priceChange" placeholder="VD: -20 hoặc 150">
+          </div>
+          <div class="field">
+            <label>Lượt mua / bán 24h</label>
+            <input type="text" id="txns" placeholder="Tự động điền" readonly>
+          </div>
+          <div class="field">
+            <label>Giá hiện tại (USD)</label>
+            <input type="text" id="priceUsd" placeholder="Tự động điền" readonly>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 2: Smart Contract Audit -->
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)">
+        <div class="section-icon" style="background:rgba(34,197,94,0.15);color:var(--green)">🔒</div>
+        <h2>Bảo mật Hợp đồng thông minh</h2>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="section-body">
+        <div class="checklist" id="securityChecks">
+          <div class="check-item checked" data-key="mintRevoked" onclick="toggleCheck(this)">
+            <span class="check-box">✓</span>
+            <span>Đã khóa quyền tạo thêm token (Mint Revoked)</span>
+          </div>
+          <div class="check-item checked" data-key="freezeRevoked" onclick="toggleCheck(this)">
+            <span class="check-box">✓</span>
+            <span>Đã khóa quyền đóng băng token (Freeze Revoked)</span>
+          </div>
+          <div class="check-item checked" data-key="lpBurned" onclick="toggleCheck(this)">
+            <span class="check-box">✓</span>
+            <span>Thanh khoản đã đốt hoặc khóa (LP Burned/Locked)</span>
+          </div>
+          <div class="check-item checked" data-key="noHoneypot" onclick="toggleCheck(this)">
+            <span class="check-box">✓</span>
+            <span>Không phải bẫy mật ong — có thể bán được (No Honeypot)</span>
+          </div>
+          <div class="check-item checked" data-key="noHiddenMint" onclick="toggleCheck(this)">
+            <span class="check-box">✓</span>
+            <span>Không có hàm ẩn tạo token / hợp đồng ủy quyền đáng ngờ</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 3: Social & Signals -->
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)">
+        <div class="section-icon" style="background:rgba(168,85,247,0.15);color:var(--purple)">📡</div>
+        <h2>Mạng xã hội & Cá voi</h2>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="section-body">
+        <div class="form-grid" style="margin-bottom:16px;">
+          <div class="field">
+            <label>Điểm tín hiệu AI <span class="hint">(0-100, nếu có)</span></label>
+            <input type="number" id="aiScore" placeholder="VD: 75" min="0" max="100">
+          </div>
+          <div class="field">
+            <label>Số lệnh mua gộp đáng ngờ</label>
+            <input type="number" id="bundledBuys" placeholder="VD: 0">
+          </div>
+        </div>
+        <div class="checklist">
+          <div class="check-item checked" data-key="hasTwitter" onclick="toggleCheck(this)">
+            <span class="check-box">✓</span>
+            <span>Có trang Twitter/X hoạt động</span>
+          </div>
+          <div class="check-item checked" data-key="hasTelegram" onclick="toggleCheck(this)">
+            <span class="check-box">✓</span>
+            <span>Có nhóm Telegram</span>
+          </div>
+          <div class="check-item checked" data-key="hasWebsite" onclick="toggleCheck(this)">
+            <span class="check-box">✓</span>
+            <span>Có trang web chính thức</span>
+          </div>
+          <div class="check-item is-red" data-key="whaleSelling" onclick="toggleCheck(this)">
+            <span class="check-box">✓</span>
+            <span>⚠ Phát hiện cá voi đang bán tháo</span>
+          </div>
+          <div class="check-item is-red" data-key="devSelling" onclick="toggleCheck(this)">
+            <span class="check-box">✓</span>
+            <span>⚠ Ví nhà phát triển đang bán</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 4: Your Position -->
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)">
+        <div class="section-icon" style="background:rgba(234,179,8,0.15);color:var(--yellow)">💰</div>
+        <h2>Vị thế của bạn (nếu đã mua)</h2>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="section-body">
+        <div class="form-grid" style="margin-bottom:16px;">
+          <div class="field">
+            <label>Tổng vốn giao dịch (USD)</label>
+            <input type="number" id="totalCapital" placeholder="VD: 1000">
+          </div>
+          <div class="field">
+            <label>Đã bỏ vào coin này (USD) <span class="hint">(0 nếu chưa mua)</span></label>
+            <input type="number" id="invested" placeholder="VD: 50">
+          </div>
+          <div class="field">
+            <label>Số lượng token đang giữ <span class="hint">(0 nếu chưa mua)</span></label>
+            <input type="number" id="tokenAmount" placeholder="VD: 1000000">
+          </div>
+          <div class="field">
+            <label>Giá trị hiện tại (USD) <span class="hint">tự tính từ giá DexScreener</span></label>
+            <input type="text" id="currentValue" placeholder="— tự động —" readonly>
+          </div>
+        </div>
+        <div class="field" style="margin-bottom: 8px;">
+          <label>Bạn đang ở giai đoạn nào?</label>
+        </div>
+        <div class="toggle-group" id="stageGroup">
+          <button type="button" class="toggle-btn active" data-val="considering" onclick="selectToggle(this)">Đang xem xét mua</button>
+          <button type="button" class="toggle-btn" data-val="holding" onclick="selectToggle(this)">Đang giữ</button>
+          <button type="button" class="toggle-btn" data-val="want-sell" onclick="selectToggle(this)">Muốn bán</button>
+          <button type="button" class="toggle-btn" data-val="want-add" onclick="selectToggle(this)">Muốn mua thêm</button>
+        </div>
+      </div>
+    </div>
+
+    <button type="button" class="analyze-btn" onclick="analyze()">⚡ PHÂN TÍCH NGAY</button>
+  </div>
+
+  <!-- RESULTS -->
+  <div id="results">
+    <div id="tokenHeaderResult"></div>
+
+    <div class="result-verdict animate-in" id="verdictCard" style="background:var(--bg-card);">
+      <div class="verdict-icon" id="verdictIcon"></div>
+      <div class="verdict-label">Khuyến nghị</div>
+      <div class="verdict-text" id="verdictText"></div>
+      <div class="verdict-sub" id="verdictSub"></div>
+    </div>
+
+    <div id="quickStats" class="quick-stats"></div>
+
+    <div class="score-ring-wrap animate-in" style="animation-delay:0.1s">
+      <div class="score-item"><div class="score-ring"><svg width="100" height="100"><circle class="bg" cx="50" cy="50" r="42"/><circle class="fg" id="ringTotal" cx="50" cy="50" r="42" stroke-dasharray="264" stroke-dashoffset="264"/></svg><div class="score-val" id="valTotal">0</div></div><div class="score-label">Tổng điểm</div></div>
+      <div class="score-item"><div class="score-ring"><svg width="100" height="100"><circle class="bg" cx="50" cy="50" r="42"/><circle class="fg" id="ringSafety" cx="50" cy="50" r="42" stroke-dasharray="264" stroke-dashoffset="264"/></svg><div class="score-val" id="valSafety">0</div></div><div class="score-label">An toàn</div></div>
+      <div class="score-item"><div class="score-ring"><svg width="100" height="100"><circle class="bg" cx="50" cy="50" r="42"/><circle class="fg" id="ringSignal" cx="50" cy="50" r="42" stroke-dasharray="264" stroke-dashoffset="264"/></svg><div class="score-val" id="valSignal">0</div></div><div class="score-label">Tín hiệu</div></div>
+      <div class="score-item"><div class="score-ring"><svg width="100" height="100"><circle class="bg" cx="50" cy="50" r="42"/><circle class="fg" id="ringRisk" cx="50" cy="50" r="42" stroke-dasharray="264" stroke-dashoffset="264"/></svg><div class="score-val" id="valRisk">0</div></div><div class="score-label">Rủi ro</div></div>
+    </div>
+
+    <div class="section animate-in" style="animation-delay:0.2s">
+      <div class="section-header" onclick="toggleSection(this)">
+        <div class="section-icon" style="background:rgba(6,182,212,0.15);color:var(--cyan)">📋</div>
+        <h2>Chi tiết đánh giá</h2><span class="chevron">▼</span>
+      </div>
+      <div class="section-body"><div class="breakdown" id="breakdownList"></div></div>
+    </div>
+
+    <div class="section animate-in" id="redFlagSection" style="animation-delay:0.25s; display:none;">
+      <div class="section-header" onclick="toggleSection(this)">
+        <div class="section-icon" style="background:rgba(239,68,68,0.15);color:var(--red)">🚩</div>
+        <h2>Cảnh báo nguy hiểm</h2><span class="chevron">▼</span>
+      </div>
+      <div class="section-body" id="redFlagList"></div>
+    </div>
+
+    <div class="section animate-in" style="animation-delay:0.3s">
+      <div class="section-header" onclick="toggleSection(this)">
+        <div class="section-icon" style="background:rgba(34,197,94,0.15);color:var(--green)">💡</div>
+        <h2>Khuyến nghị hành động</h2><span class="chevron">▼</span>
+      </div>
+      <div class="section-body" id="recommendations"></div>
+    </div>
+
+    <div class="section animate-in" style="animation-delay:0.35s" id="moneySection">
+      <div class="section-header" onclick="toggleSection(this)">
+        <div class="section-icon" style="background:rgba(234,179,8,0.15);color:var(--yellow)">🏦</div>
+        <h2>Kế hoạch vốn & Chia lệnh</h2><span class="chevron">▼</span>
+      </div>
+      <div class="section-body" id="moneyPlan"></div>
+    </div>
+
+    <div class="section animate-in" style="animation-delay:0.4s" id="exitSection">
+      <div class="section-header" onclick="toggleSection(this)">
+        <div class="section-icon" style="background:rgba(168,85,247,0.15);color:var(--purple)">🎯</div>
+        <h2>Chiến lược chốt lời / cắt lỗ</h2><span class="chevron">▼</span>
+      </div>
+      <div class="section-body" id="exitPlan"></div>
+    </div>
+
+    <button type="button" class="reset-btn" onclick="resetForm()">↻ Phân tích coin khác</button>
+  </div>
+</div>
+
+<script>
+/* ===== Globals ===== */
+var fetchedData = null; // store raw API data for results display
+
+/* ===== Section Toggle ===== */
+function toggleSection(header) {
+  var body = header.nextElementSibling;
+  if (header.classList.contains('collapsed')) {
+    header.classList.remove('collapsed');
+    body.classList.remove('hidden');
+  } else {
+    header.classList.add('collapsed');
+    body.classList.add('hidden');
+  }
+}
+
+function toggleCheck(item) { item.classList.toggle('checked'); }
+
+function selectToggle(btn) {
+  var btns = btn.parentElement.querySelectorAll('.toggle-btn');
+  for (var i = 0; i < btns.length; i++) btns[i].classList.remove('active');
+  btn.classList.add('active');
+}
+
+function getVal(id) { var el = document.getElementById(id); return el ? (parseFloat(el.value) || 0) : 0; }
+function isChecked(key) { var el = document.querySelector('.check-item[data-key="' + key + '"]'); return el ? el.classList.contains('checked') : false; }
+function getStage() { var a = document.querySelector('#stageGroup .toggle-btn.active'); return a ? a.getAttribute('data-val') : 'considering'; }
+
+function setField(id, val) {
+  var el = document.getElementById(id);
+  if (!el || val === undefined || val === null) return;
+  el.value = val;
+  el.classList.add('auto-filled');
+}
+
+function setStatus(msg, type) {
+  var el = document.getElementById('fetchStatus');
+  el.className = 'fetch-status ' + type;
+  el.innerHTML = msg;
+}
+
+function autoCheck(key) {
+  var el = document.querySelector('.check-item[data-key="' + key + '"]');
+  if (el && !el.classList.contains('checked')) el.classList.add('checked');
+}
+
+function fmtNum(n) {
+  if (n >= 1e9) return '$' + (n/1e9).toFixed(2) + 'B';
+  if (n >= 1e6) return '$' + (n/1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return '$' + (n/1e3).toFixed(1) + 'K';
+  return '$' + n.toFixed(2);
+}
+
+/* ===== DEXSCREENER FETCH ===== */
+function parseDexUrl(input) {
+  input = input.trim();
+  // URL format: https://dexscreener.com/{chain}/{pairAddress}
+  var urlMatch = input.match(/dexscreener\.com\/([^\/]+)\/([^\/?#]+)/);
+  if (urlMatch) {
+    return { type: 'pair', chain: urlMatch[1], address: urlMatch[2] };
+  }
+  // Raw address (assume search by token)
+  if (/^[a-zA-Z0-9]{20,}$/.test(input)) {
+    return { type: 'token', address: input };
+  }
+  return null;
+}
+
+function fetchDex() {
+  var input = document.getElementById('dexUrl').value;
+  if (!input.trim()) { setStatus('⚠ Vui lòng dán link DexScreener hoặc token address', 'error'); return; }
+
+  var parsed = parseDexUrl(input);
+  if (!parsed) { setStatus('⚠ Link không hợp lệ. VD: https://dexscreener.com/solana/ADDRESS', 'error'); return; }
+
+  var btn = document.getElementById('fetchBtn');
+  btn.disabled = true;
+  setStatus('<span class="spin">⟳</span> Đang lấy dữ liệu từ DexScreener...', 'loading');
+
+  var url;
+  if (parsed.type === 'pair') {
+    url = 'https://api.dexscreener.com/latest/dex/pairs/' + parsed.chain + '/' + parsed.address;
+  } else {
+    url = 'https://api.dexscreener.com/latest/dex/tokens/' + parsed.address;
+  }
+
+  fetch(url)
+    .then(function(res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    })
+    .then(function(data) {
+      var pair = null;
+      if (data.pair) {
+        pair = data.pair;
+      } else if (data.pairs && data.pairs.length > 0) {
+        // Pick pair with highest liquidity
+        pair = data.pairs.sort(function(a, b) {
+          return ((b.liquidity && b.liquidity.usd) || 0) - ((a.liquidity && a.liquidity.usd) || 0);
+        })[0];
+      }
+
+      if (!pair) {
+        setStatus('⚠ Không tìm thấy dữ liệu cho token/pair này', 'error');
+        btn.disabled = false;
+        return;
+      }
+
+      fetchedData = pair;
+      fillFromPair(pair);
+      btn.disabled = false;
+    })
+    .catch(function(err) {
+      setStatus('❌ Lỗi kết nối: ' + err.message, 'error');
+      btn.disabled = false;
+    });
+}
+
+function fillFromPair(p) {
+  // Token name
+  var name = (p.baseToken && p.baseToken.symbol) || '';
+  var fullName = (p.baseToken && p.baseToken.name) || '';
+  setField('tokenName', name + (fullName ? ' (' + fullName + ')' : ''));
+
+  // Market cap (fdv)
+  if (p.fdv) setField('marketCap', Math.round(p.fdv));
+  else if (p.marketCap) setField('marketCap', Math.round(p.marketCap));
+
+  // Liquidity
+  if (p.liquidity && p.liquidity.usd) setField('liquidity', Math.round(p.liquidity.usd));
+
+  // Volume 24h
+  if (p.volume && p.volume.h24) setField('volume24h', Math.round(p.volume.h24));
+
+  // Price change 24h
+  if (p.priceChange && p.priceChange.h24 !== undefined) setField('priceChange', p.priceChange.h24);
+
+  // Token age (minutes from pairCreatedAt)
+  if (p.pairCreatedAt) {
+    var ageMs = Date.now() - p.pairCreatedAt;
+    var ageMins = Math.round(ageMs / 60000);
+    setField('tokenAge', ageMins);
+  }
+
+  // Price
+  if (p.priceUsd) setField('priceUsd', p.priceUsd);
+
+  // Txns
+  if (p.txns && p.txns.h24) {
+    var buys = p.txns.h24.buys || 0;
+    var sells = p.txns.h24.sells || 0;
+    setField('txns', buys + ' mua / ' + sells + ' bán');
+
+    // Detect whale selling: if sells >> buys significantly
+    if (sells > 0 && buys > 0 && (sells / buys) > 3) {
+      autoCheck('whaleSelling');
+    }
+  }
+
+  // Social links from info
+  if (p.info && p.info.socials) {
+    for (var i = 0; i < p.info.socials.length; i++) {
+      var s = p.info.socials[i];
+      if (s.type === 'twitter') autoCheck('hasTwitter');
+      if (s.type === 'telegram') autoCheck('hasTelegram');
+    }
+  }
+  if (p.info && p.info.websites && p.info.websites.length > 0) {
+    autoCheck('hasWebsite');
+  }
+
+  // Count fields filled
+  var filled = 0;
+  var fields = ['tokenName','marketCap','liquidity','volume24h','priceChange','tokenAge','priceUsd','txns'];
+  for (var i = 0; i < fields.length; i++) {
+    if (document.getElementById(fields[i]).value) filled++;
+  }
+
+  var chainName = p.chainId || 'unknown';
+  var pairLabel = (p.dexId || '') + ' on ' + chainName;
+  setStatus('✅ Đã import <strong>' + name + '</strong> (' + pairLabel + ') — ' + filled + ' trường tự động điền. Kiểm tra Bảo mật & Holder thủ công.', 'success');
+}
+
+/* ===== Score Color ===== */
+function scoreColor(score) {
+  if (score >= 75) return 'var(--green)';
+  if (score >= 50) return 'var(--yellow)';
+  if (score >= 30) return 'var(--orange)';
+  return 'var(--red)';
+}
+
+function setRing(id, valId, score) {
+  var circ = 264, offset = circ - (circ * Math.min(score, 100) / 100);
+  var el = document.getElementById(id), valEl = document.getElementById(valId);
+  if (!el || !valEl) return;
+  el.style.stroke = scoreColor(score);
+  el.style.strokeDashoffset = offset;
+  valEl.textContent = Math.round(score);
+  valEl.style.color = scoreColor(score);
+}
+
+/* ===== ANALYZE ===== */
+function analyze() {
+  var d = {
+    name: document.getElementById('tokenName').value || 'TOKEN',
+    mcap: getVal('marketCap'), liq: getVal('liquidity'), vol: getVal('volume24h'),
+    age: getVal('tokenAge'), holders: getVal('holders'), top10: getVal('top10Pct'),
+    priceChg: getVal('priceChange'), aiScore: getVal('aiScore'), bundled: getVal('bundledBuys'),
+    capital: getVal('totalCapital'), invested: getVal('invested'),
+    tokenAmount: getVal('tokenAmount'),
+    priceUsd: parseFloat(document.getElementById('priceUsd').value) || 0,
+    stage: getStage(),
+    mintRevoked: isChecked('mintRevoked'), freezeRevoked: isChecked('freezeRevoked'),
+    lpBurned: isChecked('lpBurned'), noHoneypot: isChecked('noHoneypot'), noHiddenMint: isChecked('noHiddenMint'),
+    hasTwitter: isChecked('hasTwitter'), hasTelegram: isChecked('hasTelegram'), hasWebsite: isChecked('hasWebsite'),
+    whaleSelling: isChecked('whaleSelling'), devSelling: isChecked('devSelling')
+  };
+
+  // Auto-calc giá trị hiện tại = số token * giá
+  if (d.tokenAmount > 0 && d.priceUsd > 0) {
+    d.curVal = d.tokenAmount * d.priceUsd;
+  } else {
+    d.curVal = getVal('currentValue');
+  }
+  // Hiển thị vào ô readonly
+  if (d.curVal > 0) document.getElementById('currentValue').value = '$' + d.curVal.toFixed(2);
+
+  var redFlags = [], breakdown = [];
+
+  // 1. Security
+  var secChecks = [d.mintRevoked, d.freezeRevoked, d.lpBurned, d.noHoneypot, d.noHiddenMint];
+  var secCount = 0;
+  for (var i = 0; i < secChecks.length; i++) { if (secChecks[i]) secCount++; }
+  var secScore = secCount * 20;
+  if (!d.mintRevoked) redFlags.push('Chưa khóa quyền tạo token — Nhà phát triển có thể in thêm và bán phá giá');
+  if (!d.lpBurned) redFlags.push('Thanh khoản chưa đốt/khóa — Có nguy cơ rút thanh khoản (rug pull)');
+  if (!d.noHoneypot) redFlags.push('Chưa xác nhận bẫy mật ong — Có thể mua được nhưng không bán được');
+  breakdown.push({ label: 'Bảo mật hợp đồng', score: secScore, color: scoreColor(secScore) });
+
+  // 2. Liquidity
+  var liqScore = 0;
+  if (d.mcap > 0 && d.liq > 0) {
+    var liqRatio = d.liq / d.mcap;
+    if (liqRatio >= 0.1) liqScore = 100;
+    else if (liqRatio >= 0.05) liqScore = 75;
+    else if (liqRatio >= 0.02) liqScore = 50;
+    else if (liqRatio >= 0.01) liqScore = 25;
+    else { liqScore = 10; redFlags.push('Tỷ lệ LP/MCap cực thấp (' + (liqRatio*100).toFixed(2) + '%)'); }
+  }
+  if (d.liq > 0 && d.liq < 5000) { liqScore = Math.min(liqScore, 20); redFlags.push('Thanh khoản dưới $5,000 — Rất dễ bị thao túng'); }
+  breakdown.push({ label: 'Thanh khoản', score: liqScore, color: scoreColor(liqScore) });
+
+  // 3. Volume
+  var volScore = 0;
+  if (d.mcap > 0 && d.vol > 0) {
+    var volRatio = d.vol / d.mcap;
+    if (volRatio >= 1) volScore = 100;
+    else if (volRatio >= 0.5) volScore = 80;
+    else if (volRatio >= 0.2) volScore = 60;
+    else if (volRatio >= 0.05) volScore = 40;
+    else volScore = 20;
+  }
+  breakdown.push({ label: 'Khối lượng giao dịch', score: volScore, color: scoreColor(volScore) });
+
+  // 4. Holders (nếu không nhập → mặc định 50 = trung bình, không phạt)
+  var holderScore = 0;
+  if (d.holders === 0 && d.top10 === 0) {
+    holderScore = 50; // chưa có dữ liệu → trung bình
+  } else {
+    if (d.holders >= 500) holderScore += 40;
+    else if (d.holders >= 200) holderScore += 30;
+    else if (d.holders >= 50) holderScore += 20;
+    else if (d.holders > 0) holderScore += 5;
+    else holderScore += 20; // không nhập → không phạt
+
+    if (d.top10 === 0) holderScore += 30; // không nhập → không phạt
+    else if (d.top10 <= 20) holderScore += 60;
+    else if (d.top10 <= 35) holderScore += 45;
+    else if (d.top10 <= 50) holderScore += 25;
+    else { holderScore += 5; redFlags.push('Top 10 ví lớn nắm ' + d.top10 + '% — Tập trung quá nhiều vào ít người'); }
+  }
+  holderScore = Math.min(holderScore, 100);
+  breakdown.push({ label: 'Phân bổ người giữ', score: holderScore, color: scoreColor(holderScore) });
+
+  // 4b. Price Action — đánh giá biến động giá
+  var priceScore = 50;
+  var priceAdvice = '';
+  if (d.priceChg !== 0) {
+    if (d.priceChg <= -50) { priceScore = 30; priceAdvice = 'Giá giảm mạnh (-' + Math.abs(d.priceChg) + '%). Có thể là cơ hội mua đáy hoặc đang sụp — kiểm tra kỹ.'; }
+    else if (d.priceChg <= -20) { priceScore = 55; priceAdvice = 'Giá đang điều chỉnh. Có thể là điểm vào tốt nếu tín hiệu khác ổn.'; }
+    else if (d.priceChg <= 20) { priceScore = 70; priceAdvice = 'Giá ổn định. Vùng an toàn để vào lệnh.'; }
+    else if (d.priceChg <= 100) { priceScore = 60; priceAdvice = 'Giá đang tăng (+' + d.priceChg + '%). Cẩn thận mua đỉnh, chờ kéo ngược.'; }
+    else if (d.priceChg <= 500) { priceScore = 35; priceAdvice = 'Giá đã bơm mạnh (+' + d.priceChg + '%). Rủi ro cao nếu mua bây giờ.'; redFlags.push('Giá đã tăng ' + d.priceChg + '% — Cẩn thận mua đỉnh'); }
+    else { priceScore = 15; priceAdvice = 'Giá bơm cực mạnh (+' + d.priceChg + '%). Gần như chắc chắn sẽ giảm.'; redFlags.push('Giá bơm +' + d.priceChg + '% — Cực kỳ nguy hiểm nếu mua lúc này'); }
+  }
+  breakdown.push({ label: 'Biến động giá', score: priceScore, color: scoreColor(priceScore) });
+
+  // 5. Age
+  var ageScore = 50;
+  if (d.age > 0) {
+    if (d.age < 5) ageScore = 30;
+    else if (d.age <= 30) ageScore = 85;
+    else if (d.age <= 120) ageScore = 70;
+    else if (d.age <= 480) ageScore = 50;
+    else ageScore = 30;
+  }
+  breakdown.push({ label: 'Thời điểm vào lệnh', score: ageScore, color: scoreColor(ageScore) });
+
+  // 6. Social
+  var socialScore = 0;
+  if (d.hasTwitter) socialScore += 35;
+  if (d.hasTelegram) socialScore += 30;
+  if (d.hasWebsite) socialScore += 35;
+  if (socialScore === 0) redFlags.push('Không có mạng xã hội nào — Dự án thiếu minh bạch');
+  breakdown.push({ label: 'Mạng xã hội', score: socialScore, color: scoreColor(socialScore) });
+
+  // 7. AI Signal
+  var sigScore = d.aiScore || 50;
+  if (d.aiScore > 0 && d.aiScore < 50) redFlags.push('Điểm AI chỉ ' + d.aiScore + '/100 — Tín hiệu yếu');
+  breakdown.push({ label: 'Điểm tín hiệu AI', score: sigScore, color: scoreColor(sigScore) });
+
+  // 8. Whale/Dev
+  var whaleScore = 100;
+  if (d.whaleSelling) { whaleScore -= 40; redFlags.push('Cá voi đang bán tháo'); }
+  if (d.devSelling) { whaleScore -= 50; redFlags.push('Ví nhà phát triển đang bán — Dấu hiệu nguy hiểm nhất'); }
+  if (d.bundled > 3) { whaleScore -= 20; redFlags.push(d.bundled + ' lệnh mua gộp — Nghi vấn nội gián/bot'); }
+  whaleScore = Math.max(whaleScore, 0);
+  breakdown.push({ label: 'Cá voi & Nhà phát triển', score: whaleScore, color: scoreColor(whaleScore) });
+
+  // Aggregate (9 tiêu chí)
+  var allScores = [secScore, liqScore, volScore, holderScore, priceScore, ageScore, socialScore, sigScore, whaleScore];
+  var wArr = [0.18, 0.13, 0.08, 0.08, 0.12, 0.08, 0.08, 0.1, 0.15];
+  var totalScore = 0;
+  for (var i = 0; i < allScores.length; i++) totalScore += allScores[i] * wArr[i];
+  var safetyScore = (secScore * 0.5 + whaleScore * 0.3 + liqScore * 0.2);
+  var signalScore = (sigScore * 0.25 + volScore * 0.2 + socialScore * 0.15 + ageScore * 0.2 + priceScore * 0.2);
+  var riskScore = 100 - totalScore;
+
+  // Verdict
+  var verdict, verdictIcon, verdictSub, verdictColor;
+  var stage = d.stage;
+  var criticalFlags = d.devSelling || (!d.noHoneypot && !d.mintRevoked && !d.lpBurned);
+
+  if (criticalFlags && stage === 'considering') {
+    verdict = 'KHÔNG MUA'; verdictIcon = '🚫'; verdictSub = 'Phát hiện dấu hiệu nguy hiểm nghiêm trọng. Bỏ qua coin này.'; verdictColor = 'var(--red)';
+  } else if (criticalFlags) {
+    verdict = 'BÁN NGAY'; verdictIcon = '🔴'; verdictSub = 'Có dấu hiệu nguy hiểm. Thoát lệnh càng sớm càng tốt.'; verdictColor = 'var(--red)';
+  } else if (totalScore >= 75) {
+    if (stage === 'considering') { verdict = 'NÊN MUA'; verdictIcon = '🟢'; verdictSub = d.name + ' có tín hiệu tốt. Vào lệnh theo kế hoạch tranche.'; verdictColor = 'var(--green)'; }
+    else if (stage === 'holding') { verdict = 'GIỮ TIẾP'; verdictIcon = '🟢'; verdictSub = 'Tín hiệu tích cực. Tiếp tục giữ theo exit plan.'; verdictColor = 'var(--green)'; }
+    else if (stage === 'want-add') { verdict = 'CÓ THỂ MUA THÊM'; verdictIcon = '🟢'; verdictSub = 'Tín hiệu tốt, kiểm tra position size trước.'; verdictColor = 'var(--green)'; }
+    else { verdict = 'CHƯA CẦN BÁN'; verdictIcon = '🟡'; verdictSub = 'Tín hiệu khả quan. Bán theo scaled exit nếu đạt target.'; verdictColor = 'var(--yellow)'; }
+  } else if (totalScore >= 50) {
+    if (stage === 'considering') { verdict = 'CẨN THẬN'; verdictIcon = '🟡'; verdictSub = d.name + ' tín hiệu trung bình. Chỉ lệnh nhỏ nếu chấp nhận rủi ro.'; verdictColor = 'var(--yellow)'; }
+    else if (stage === 'holding') { verdict = 'THEO DÕI SÁT'; verdictIcon = '🟡'; verdictSub = 'Set stop-loss và sẵn sàng thoát nếu xấu đi.'; verdictColor = 'var(--yellow)'; }
+    else { verdict = 'CÂN NHẮC BÁN BỚT'; verdictIcon = '🟠'; verdictSub = 'Tín hiệu không mạnh. Chốt lời một phần.'; verdictColor = 'var(--orange)'; }
+  } else {
+    if (stage === 'considering') { verdict = 'KHÔNG MUA'; verdictIcon = '🔴'; verdictSub = d.name + ' có quá nhiều rủi ro. Tìm cơ hội khác.'; verdictColor = 'var(--red)'; }
+    else { verdict = 'NÊN BÁN'; verdictIcon = '🔴'; verdictSub = 'Điểm rủi ro cao. Cắt lỗ hoặc chốt lời còn lại.'; verdictColor = 'var(--red)'; }
+  }
+
+  // ===== RENDER =====
+  document.getElementById('inputForm').style.display = 'none';
+  document.getElementById('results').classList.add('show');
+
+  // Token header if we have fetched data
+  var thEl = document.getElementById('tokenHeaderResult');
+  if (fetchedData) {
+    var p = fetchedData;
+    var imgUrl = (p.info && p.info.imageUrl) || '';
+    var imgTag = imgUrl ? '<img src="' + imgUrl + '" alt="">' : '<div style="width:48px;height:48px;border-radius:50%;background:var(--bg-elevated);display:flex;align-items:center;justify-content:center;font-size:22px;">' + (d.name.charAt(0) || '?') + '</div>';
+    var chainBadge = p.chainId ? '<span class="chain-badge">' + p.chainId + '</span>' : '';
+    var priceChgColor = d.priceChg >= 0 ? 'var(--green)' : 'var(--red)';
+    var priceChgSign = d.priceChg >= 0 ? '+' : '';
+    thEl.innerHTML = '<div class="token-header animate-in">'
+      + imgTag
+      + '<div class="info"><div class="name">' + d.name + chainBadge + '</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px;">' + ((p.baseToken && p.baseToken.address) || '').substring(0,16) + '...</div></div>'
+      + '<div><div class="price">$' + (p.priceUsd || '?') + '</div><div class="price-change" style="color:' + priceChgColor + '">' + priceChgSign + d.priceChg + '% (24h)</div></div>'
+      + '</div>';
+  } else {
+    thEl.innerHTML = '';
+  }
+
+  // Quick stats
+  var qsEl = document.getElementById('quickStats');
+  var stats = [];
+  if (d.mcap) stats.push({ val: fmtNum(d.mcap), label: 'Vốn hóa' });
+  if (d.liq) stats.push({ val: fmtNum(d.liq), label: 'Thanh khoản' });
+  if (d.vol) stats.push({ val: fmtNum(d.vol), label: 'KL giao dịch 24h' });
+  if (d.age) {
+    var ageStr = d.age < 60 ? d.age + ' phút' : d.age < 1440 ? (d.age/60).toFixed(1) + ' giờ' : (d.age/1440).toFixed(0) + ' ngày';
+    stats.push({ val: ageStr, label: 'Tuổi token' });
+  }
+  if (d.holders) stats.push({ val: d.holders.toLocaleString(), label: 'Người giữ' });
+  var qsHTML = '';
+  for (var i = 0; i < stats.length; i++) {
+    qsHTML += '<div class="stat-card"><div class="stat-val">' + stats[i].val + '</div><div class="stat-label">' + stats[i].label + '</div></div>';
+  }
+  qsEl.innerHTML = qsHTML;
+
+  // Verdict
+  document.getElementById('verdictIcon').textContent = verdictIcon;
+  document.getElementById('verdictText').textContent = verdict;
+  document.getElementById('verdictText').style.color = verdictColor;
+  document.getElementById('verdictSub').textContent = verdictSub;
+
+  setTimeout(function() {
+    setRing('ringTotal', 'valTotal', totalScore);
+    setRing('ringSafety', 'valSafety', safetyScore);
+    setRing('ringSignal', 'valSignal', signalScore);
+    setRing('ringRisk', 'valRisk', riskScore);
+  }, 200);
+
+  // Breakdown
+  var bList = document.getElementById('breakdownList');
+  var bHTML = '';
+  for (var i = 0; i < breakdown.length; i++) {
+    var b = breakdown[i];
+    bHTML += '<div class="breakdown-row" style="border-left-color:' + b.color + '"><span class="label">' + b.label + '</span><div class="bar-wrap"><div class="bar-fill" style="width:' + b.score + '%;background:' + b.color + '"></div></div><span class="val" style="color:' + b.color + '">' + Math.round(b.score) + '</span></div>';
+  }
+  bList.innerHTML = bHTML;
+
+  // Red Flags
+  var rfSection = document.getElementById('redFlagSection');
+  var rfList = document.getElementById('redFlagList');
+  if (redFlags.length > 0) {
+    rfSection.style.display = 'block';
+    var rfHTML = '';
+    for (var i = 0; i < redFlags.length; i++) rfHTML += '<div class="warn-box"><span class="icon">🚩</span><span>' + redFlags[i] + '</span></div>';
+    rfList.innerHTML = rfHTML;
+  } else { rfSection.style.display = 'none'; }
+
+  // Recommendations
+  var recEl = document.getElementById('recommendations');
+  var recHTML = '';
+  var cap = d.capital || 1000;
+
+  // Price action advice
+  if (priceAdvice) {
+    var paColor = priceScore >= 60 ? 'var(--green)' : priceScore >= 40 ? 'var(--yellow)' : 'var(--red)';
+    recHTML += '<div class="rec-card" style="border-left-color:' + paColor + '"><h4 style="color:' + paColor + '">📊 Nhận xét giá hiện tại</h4><p>' + priceAdvice + '</p></div>';
+  }
+
+  if (totalScore >= 50 && (stage === 'considering' || stage === 'want-add')) {
+    recHTML += '<div class="rec-card" style="border-left-color:var(--green)"><h4 style="color:var(--green)">✅ Quy tắc 1% — Kích thước lệnh</h4><p>Với tổng vốn $' + cap + ', mỗi lệnh tối đa <strong style="color:var(--cyan)">$' + (cap*0.01).toFixed(0) + '</strong> (1%). Tối đa mỗi coin: <strong style="color:var(--yellow)">$' + (cap*0.05).toFixed(0) + '</strong> (5%).</p></div>';
+  }
+
+  if (stage === 'holding' || stage === 'want-sell') {
+    var pnl = d.invested > 0 ? ((d.curVal - d.invested) / d.invested * 100) : 0;
+    var pnlColor = pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    recHTML += '<div class="rec-card" style="border-left-color:' + pnlColor + '"><h4 style="color:' + pnlColor + '">' + (pnl >= 0 ? '📈' : '📉') + ' Lãi/Lỗ: ' + (pnl >= 0 ? '+' : '') + pnl.toFixed(1) + '%</h4><p>Bỏ vào: $' + d.invested + ' → Hiện tại: $' + d.curVal.toFixed(2) + ' | ' + (pnl >= 0 ? 'Lãi' : 'Lỗ') + ': <strong style="color:' + pnlColor + '">$' + Math.abs(d.curVal - d.invested).toFixed(2) + '</strong></p></div>';
+    if (pnl >= 100) recHTML += '<div class="rec-card" style="border-left-color:var(--green)"><h4 style="color:var(--green)">🎯 Đã x' + (d.curVal/d.invested).toFixed(1) + ' — Bán theo từng bậc</h4><p>Chốt ít nhất 50% để thu vốn gốc, giữ phần còn lại chạy tự do.</p></div>';
+    else if (pnl <= -30) recHTML += '<div class="rec-card" style="border-left-color:var(--red)"><h4 style="color:var(--red)">⛔ Đang lỗ ' + Math.abs(pnl).toFixed(0) + '%</h4><p>Điểm thấp + lỗ lớn = cân nhắc cắt lỗ. Đừng giao dịch trả thù.</p></div>';
+  }
+
+  if (d.whaleSelling || d.devSelling) {
+    recHTML += '<div class="rec-card" style="border-left-color:var(--red)"><h4 style="color:var(--red)">🐋 Cá voi / Nhà phát triển đang bán</h4><p>' + (d.devSelling ? 'Ví nhà phát triển đang bán tháo — thoát ngay nếu có thể.' : 'Cá voi đang bán. Đặt điểm cắt lỗ ngay.') + '</p></div>';
+  }
+
+  recHTML += '<div class="warn-box info" style="margin-top:16px;"><span class="icon">📌</span><span><strong>Nhắc nhở:</strong> Đây chỉ là công cụ hỗ trợ, KHÔNG phải lời khuyên tài chính. Luôn tự nghiên cứu và chỉ đầu tư số tiền bạn sẵn sàng mất.</span></div>';
+  recEl.innerHTML = recHTML;
+
+  // Money plan
+  var moneyEl = document.getElementById('moneyPlan');
+  if (stage === 'considering' || stage === 'want-add') {
+    var buyAmt = cap * 0.05;
+    moneyEl.innerHTML = '<p style="color:var(--text-body);margin-bottom:16px;">Tổng vốn <strong style="color:var(--cyan)">$' + cap + '</strong> — Chiến lược chia 3 lệnh:</p>'
+      + '<table class="tranche-table"><thead><tr><th>Lệnh</th><th>%</th><th>Số tiền</th><th>Thời điểm</th></tr></thead><tbody>'
+      + '<tr><td>🟢 Thăm dò</td><td>30%</td><td class="highlight">$' + (buyAmt*0.3).toFixed(2) + '</td><td>Ngay khi có tín hiệu</td></tr>'
+      + '<tr><td>🔵 Xác nhận</td><td>40%</td><td class="highlight">$' + (buyAmt*0.4).toFixed(2) + '</td><td>Xác nhận xu hướng (5-15 phút)</td></tr>'
+      + '<tr><td>🟣 Đầy đủ</td><td>30%</td><td class="highlight">$' + (buyAmt*0.3).toFixed(2) + '</td><td>Khi tin tưởng cao nhất</td></tr>'
+      + '</tbody></table>'
+      + '<div class="warn-box info"><span class="icon">📐</span><span>Tối đa/lệnh: <strong>$' + (cap*0.01).toFixed(0) + '</strong> (1%) — Tối đa/coin: <strong>$' + (cap*0.05).toFixed(0) + '</strong> (5%) — Dự phòng: <strong>$' + (cap*0.2).toFixed(0) + '</strong> (20%)</span></div>';
+  } else {
+    var pctUsed = d.invested > 0 ? (d.invested / cap * 100).toFixed(1) : '0';
+    moneyEl.innerHTML = '<p style="color:var(--text-body)">Sử dụng <strong style="color:var(--cyan)">' + pctUsed + '%</strong> vốn ($' + d.invested + '/$' + cap + '). '
+      + (parseFloat(pctUsed) > 5 ? '<span style="color:var(--orange)">⚠ Vượt 5%!</span>' : '<span style="color:var(--green)">✅ An toàn.</span>') + '</p>';
+  }
+
+  // Exit plan
+  var exitEl = document.getElementById('exitPlan');
+  var entry = d.invested > 0 ? d.invested : 100;
+  var exitStepsHTML = '<div class="exit-steps">'
+    + '<div class="exit-step"><div class="exit-step-line"><div class="exit-dot" style="border-color:var(--green)"></div><div class="exit-line-seg"></div></div><div class="exit-content"><strong>Bán 25% khi lãi gấp 2</strong> ($' + (entry*2).toFixed(0) + ')<br><span>Thu hồi 50% vốn gốc — giảm rủi ro</span></div></div>'
+    + '<div class="exit-step"><div class="exit-step-line"><div class="exit-dot" style="border-color:var(--cyan)"></div><div class="exit-line-seg"></div></div><div class="exit-content"><strong>Bán 25% khi lãi gấp 5</strong> ($' + (entry*5).toFixed(0) + ')<br><span>Thu hồi toàn bộ vốn — từ đây là "tiền lời"</span></div></div>'
+    + '<div class="exit-step"><div class="exit-step-line"><div class="exit-dot" style="border-color:var(--purple)"></div><div class="exit-line-seg"></div></div><div class="exit-content"><strong>Bán 25% khi lãi gấp 10</strong> ($' + (entry*10).toFixed(0) + ')<br><span>Chốt lời lớn</span></div></div>'
+    + '<div class="exit-step"><div class="exit-step-line"><div class="exit-dot" style="border-color:var(--yellow)"></div><div class="exit-line-seg"></div></div><div class="exit-content"><strong>Giữ 25% còn lại</strong><br><span>Để chạy tự do, không áp lực — đã hoàn vốn</span></div></div>'
+    + '</div>';
+
+  if (stage === 'holding' || stage === 'want-sell') {
+    exitEl.innerHTML = '<p style="color:var(--text-body);margin-bottom:16px;">Bán theo từng bậc:</p>' + exitStepsHTML
+      + '<div class="warn-box"><span class="icon">⚡</span><span><strong>Thoát ngay nếu:</strong> Nhà phát triển bán, thanh khoản bị rút, khối lượng giao dịch về 0.</span></div>';
+  } else {
+    exitEl.innerHTML = '<p style="color:var(--text-body)">Lên kế hoạch chốt lời <em>trước</em> khi mua:</p>' + exitStepsHTML
+      + '<div class="sep"></div><p style="color:var(--text-muted);font-size:13px;"><strong>Cắt lỗ:</strong> Đặt tại -30% đến -50%. Không bao giờ để mất quá 1% tổng vốn trên 1 lệnh.</p>';
+  }
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/* ===== RESET ===== */
+function resetForm() {
+  document.getElementById('inputForm').style.display = 'block';
+  document.getElementById('results').classList.remove('show');
+  fetchedData = null;
+
+  var rings = ['ringTotal','ringSafety','ringSignal','ringRisk'];
+  var vals = ['valTotal','valSafety','valSignal','valRisk'];
+  for (var i = 0; i < rings.length; i++) {
+    var el = document.getElementById(rings[i]); if (el) el.style.strokeDashoffset = 264;
+    var v = document.getElementById(vals[i]); if (v) v.textContent = '0';
+  }
+  // Clear auto-filled
+  var afs = document.querySelectorAll('.auto-filled');
+  for (var i = 0; i < afs.length; i++) afs[i].classList.remove('auto-filled');
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/* ===== Allow Enter key on DexScreener input ===== */
+document.getElementById('dexUrl').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') { e.preventDefault(); fetchDex(); }
+});
+
+/* ===== Auto-calc giá trị hiện tại khi nhập số lượng token ===== */
+document.getElementById('tokenAmount').addEventListener('input', function() {
+  var amount = parseFloat(this.value) || 0;
+  var price = parseFloat(document.getElementById('priceUsd').value) || 0;
+  var cvEl = document.getElementById('currentValue');
+  if (amount > 0 && price > 0) {
+    cvEl.value = '$' + (amount * price).toFixed(2);
+  } else {
+    cvEl.value = '';
+  }
+});
+</script>
+</body>
+</html>
