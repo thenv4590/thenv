@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coin Radar — Bong bóng theo dõi</title>
+<style>
+  :root {
+    --bg: #0a0b10; --card: #111827; --elevated: #1a1e2e;
+    --border: rgba(255,255,255,0.08);
+    --green: #22c55e; --cyan: #06b6d4; --yellow: #eab308;
+    --orange: #f97316; --red: #ef4444; --purple: #a855f7;
+    --text: #f1f5f9; --muted: #94a3b8; --dim: #64748b;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Segoe UI',Inter,system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+  .container { max-width:1200px; margin:0 auto; padding:20px 16px; }
+
+  /* Header */
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; flex-wrap:wrap; gap:12px; }
+  .header h1 { font-size:22px; font-weight:700; background:linear-gradient(135deg,var(--cyan),var(--green)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .header-right { display:flex; align-items:center; gap:12px; }
+  .status-dot { width:8px; height:8px; border-radius:50%; background:var(--green); animation:pulse 2s infinite; }
+  .status-dot.paused { background:var(--dim); animation:none; }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+  .status-text { font-size:12px; color:var(--muted); }
+  .pause-btn {
+    padding:6px 16px; border-radius:8px; border:1px solid var(--border);
+    background:transparent; color:var(--muted); font-size:12px; cursor:pointer;
+    transition:all 0.2s;
+  }
+  .pause-btn:hover { border-color:var(--cyan); color:var(--text); }
+
+  /* Sections */
+  .zone-section { margin-bottom:28px; }
+  .zone-header {
+    display:flex; align-items:center; gap:10px;
+    margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid var(--border);
+  }
+  .zone-header h2 { font-size:15px; font-weight:600; }
+  .zone-header .count {
+    font-size:11px; padding:2px 8px; border-radius:10px;
+    background:rgba(255,255,255,0.06); color:var(--muted);
+  }
+  .zone-empty {
+    padding:30px; text-align:center; color:var(--dim); font-size:13px;
+    border:1px dashed var(--border); border-radius:12px;
+  }
+
+  /* Bubble Grid */
+  .bubble-grid {
+    display:flex; flex-wrap:wrap; gap:10px;
+  }
+
+  /* Bubble */
+  .bubble {
+    position:relative; padding:14px 16px; border-radius:14px;
+    background:var(--card); border:1px solid var(--border);
+    cursor:pointer; transition:all 0.3s ease; min-width:155px; flex:0 0 auto;
+    overflow:hidden;
+  }
+  .bubble:hover { transform:translateY(-2px); border-color:rgba(255,255,255,0.15); }
+  .bubble .glow {
+    position:absolute; top:-20px; right:-20px; width:60px; height:60px;
+    border-radius:50%; pointer-events:none; opacity:0.15;
+  }
+  .bubble-top { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; }
+  .bubble-id { display:flex; align-items:center; gap:8px; }
+  .bubble-logo { width:24px; height:24px; border-radius:50%; background:var(--elevated); object-fit:cover; flex-shrink:0; }
+  .bubble-logo-placeholder {
+    width:24px; height:24px; border-radius:50%; background:var(--elevated);
+    display:flex; align-items:center; justify-content:center;
+    font-size:11px; font-weight:700; color:var(--dim); flex-shrink:0;
+  }
+  .bubble-symbol { font-size:15px; font-weight:700; }
+  .bubble-zone-tag {
+    font-size:9px; font-weight:700; padding:2px 6px; border-radius:4px;
+    text-transform:uppercase; letter-spacing:0.5px;
+  }
+  .bubble-price { font-size:12px; color:var(--muted); margin-bottom:4px; }
+  .bubble-row { display:flex; align-items:center; justify-content:space-between; gap:6px; }
+  .bubble-change { font-size:13px; font-weight:600; }
+  .bubble-mcap { font-size:10px; color:var(--dim); }
+  .bubble-vol { font-size:10px; color:var(--dim); margin-top:3px; }
+  .bubble-grade {
+    position:absolute; bottom:6px; right:10px; font-size:10px; font-weight:700;
+    opacity:0.5;
+  }
+  /* Zone colors */
+  .bubble.z-entry { border-color:rgba(34,197,94,0.3); }
+  .bubble.z-entry .glow { background:radial-gradient(circle,var(--green),transparent 70%); }
+  .bubble.z-hold { border-color:rgba(6,182,212,0.3); }
+  .bubble.z-hold .glow { background:radial-gradient(circle,var(--cyan),transparent 70%); }
+  .bubble.z-takeprofit { border-color:rgba(249,115,22,0.3); }
+  .bubble.z-takeprofit .glow { background:radial-gradient(circle,var(--orange),transparent 70%); }
+  .bubble.z-caution { border-color:rgba(234,179,8,0.2); }
+  .bubble.z-caution .glow { background:radial-gradient(circle,var(--yellow),transparent 70%); }
+  .bubble.z-danger { border-color:rgba(239,68,68,0.3); }
+  .bubble.z-danger .glow { background:radial-gradient(circle,var(--red),transparent 70%); }
+  .bubble.z-dead { border-color:rgba(100,116,139,0.2); opacity:0.5; }
+  .bubble.z-dead .glow { display:none; }
+  .bubble.notable { box-shadow:0 0 20px rgba(34,197,94,0.1); }
+
+  /* Transition animation */
+  .bubble.moving { animation:bubbleMove 0.5s ease; }
+  @keyframes bubbleMove { from{opacity:0;transform:scale(0.8) translateY(10px);} to{opacity:1;transform:scale(1) translateY(0);} }
+
+  /* Loading skeleton */
+  .bubble.loading {
+    background:linear-gradient(90deg,var(--card) 25%,var(--elevated) 50%,var(--card) 75%);
+    background-size:200% 100%; animation:shimmer 1.5s infinite; min-height:80px;
+  }
+  @keyframes shimmer { 0%{background-position:200% 0;} 100%{background-position:-200% 0;} }
+
+  /* Config */
+  .config-bar {
+    margin-bottom:20px; padding:14px 18px; border-radius:12px;
+    background:var(--card); border:1px solid var(--border);
+  }
+  .config-bar summary {
+    cursor:pointer; font-size:13px; color:var(--cyan); font-weight:600;
+    list-style:none; display:flex; align-items:center; gap:6px;
+  }
+  .config-bar summary::before { content:'⚙️'; }
+  .config-body { margin-top:12px; }
+  .config-body textarea {
+    width:100%; min-height:80px; background:var(--bg); border:1px solid var(--border);
+    border-radius:8px; padding:10px 14px; color:var(--text); font-size:12px;
+    font-family:monospace; resize:vertical; outline:none;
+  }
+  .config-body textarea:focus { border-color:var(--cyan); }
+  .config-hint { font-size:11px; color:var(--dim); margin-top:6px; }
+  .config-actions { display:flex; gap:8px; margin-top:10px; }
+  .config-actions button {
+    padding:8px 16px; border-radius:8px; border:none; font-size:12px;
+    font-weight:600; cursor:pointer; transition:all 0.2s;
+  }
+  .btn-apply { background:linear-gradient(135deg,var(--cyan),var(--green)); color:#fff; }
+  .btn-apply:hover { box-shadow:0 4px 15px rgba(6,182,212,0.3); }
+
+  /* Timer bar */
+  .timer-bar { height:2px; background:var(--elevated); border-radius:1px; margin-bottom:20px; overflow:hidden; }
+  .timer-fill { height:100%; background:var(--cyan); border-radius:1px; transition:width 0.3s linear; }
+
+  /* Show more button */
+  .show-more-btn {
+    width:100%; padding:10px; border:1px dashed var(--border); border-radius:10px;
+    background:transparent; color:var(--muted); font-size:13px; cursor:pointer;
+    transition:all 0.2s; margin-top:2px;
+  }
+  .show-more-btn:hover { border-color:var(--cyan); color:var(--cyan); background:rgba(6,182,212,0.05); }
+  .others-hidden { display:contents; }
+
+  /* Bubble action buttons */
+  .bubble-actions {
+    display:flex; gap:6px; margin-top:8px; position:relative; z-index:2;
+  }
+  .bubble-actions button {
+    flex:1; padding:5px 8px; border-radius:6px; border:1px solid var(--border);
+    background:rgba(255,255,255,0.04); color:var(--muted); font-size:10px;
+    font-weight:600; cursor:pointer; transition:all 0.2s; white-space:nowrap;
+  }
+  .bubble-actions .btn-view-dex:hover {
+    border-color:var(--cyan); color:var(--cyan); background:rgba(6,182,212,0.1);
+  }
+  .bubble-actions .btn-copy-name:hover {
+    border-color:var(--green); color:var(--green); background:rgba(34,197,94,0.1);
+  }
+  .bubble-actions .btn-copy-name.copied {
+    border-color:var(--green); color:var(--green); background:rgba(34,197,94,0.15);
+  }
+
+  @media(max-width:600px) {
+    .bubble { min-width:calc(50% - 5px); flex:1 1 calc(50% - 5px); }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>Coin Radar</h1>
+    <div class="header-right">
+      <div class="status-dot" id="statusDot"></div>
+      <span class="status-text" id="statusText">Đang tải...</span>
+      <button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸ Dừng</button>
+    </div>
+  </div>
+
+  <div class="timer-bar"><div class="timer-fill" id="timerFill" style="width:100%"></div></div>
+
+  <details class="config-bar">
+    <summary>Cấu hình danh sách token</summary>
+    <div class="config-body">
+      <textarea id="tokenList" placeholder="Mỗi dòng 1 token address hoặc link DexScreener..."></textarea>
+      <div class="config-hint">Mỗi dòng 1 token address hoặc link dexscreener.com. Tối đa 30 token.</div>
+      <div class="config-actions">
+        <button class="btn-apply" onclick="applyConfig()">Áp dụng & Refresh</button>
+      </div>
+    </div>
+  </details>
+
+  <!-- Notable Section -->
+  <div class="zone-section" id="notableSection">
+    <div class="zone-header">
+      <span style="font-size:20px">⭐</span>
+      <h2 style="color:var(--green)">Coin đáng chú ý</h2>
+      <span class="count" id="notableCount">0</span>
+    </div>
+    <div class="bubble-grid" id="notableGrid"></div>
+  </div>
+
+  <!-- Others Section -->
+  <div class="zone-section" id="othersSection">
+    <div class="zone-header">
+      <span style="font-size:20px">📋</span>
+      <h2>Theo dõi</h2>
+      <span class="count" id="othersCount">0</span>
+    </div>
+    <div class="bubble-grid" id="othersGrid"></div>
+  </div>
+</div>
+
+<script>
+// ===== CONFIG =====
+var DEFAULT_TOKENS = [
+  'GrPy4PkFj13un2y3ko3g2nwi2QzsBTvWXq2GCmVnpump',
+  '72AyWfN3CWf3Q9h5DorqVmYnkjaAgCZjrTuB73JGpump',
+  '9ucA1tsn1wTsGX7kjC83phxJQKLYjbswhaSQfs2Dpump',
+  '4keYkbyj4hyAxXFCznBibkSm3JQRbJpKqafHJuhfpump',
+  '4BCG6cQnyiH9Vt2YWuoKEXN4peijsAjZQ3UqM7bopump',
+  '5McTS9mVBtigT9waQhHVZXkGfTA8cHpBEDsJaP4vpump',
+  '5MpULHyhjhJJHF8W7fNN7FnkBtGXSumTu386smWZpump',
+  'Dq5F66R6Wsp2s82PSDhVSYqFpWGVzcnuJDhTuMyupump',
+  'Dozjk3yykAigdg2DM2fUR2P8hs1fBqLhYdgmoHPFpump',
+  'qnZBztbvGsS744VDk91EeswScSNxjw1X8kHcem1pump',
+  '88PnD7uyWFPsax5MeVQKCRVx6mLyBVYMrFKe3DobDSR1',
+  '915jYJP3vMUozT8zSp1H66dJ6BMC4dUZHWDsUkGkpump',
+  'AzowNX1WCVUQPtLyDpdQ3DLEJ8DZEuF5cwsbVhfMpump',
+  '5qtdsKvSdTukD6SeJSYAQbQoppZCseHkw8zkzbQYpump',
+  '6t12PVyDCTpwiFWBKHHc1vAKocUUKexkHXM5tEtUpump',
+  'FaE4Vbha6Mw32KPL5j3EoCj1wVQRGUewxMJ7yc3Mpump',
+  '8eYazgzhUGdvWuZXTXHsa53w1gp4F3732jB66chdpump',
+  '6kNqMmexpkX89Rpwm2xCLQvm1Dy6Qc5D3E7FqFvJpump',
+  '7aACsWVfjgyqsvkxuxngHisFBdHfgZNbB9nEgiJApump',
+  '4fmXzLrAcWyBr4xTeqvTBmtve7hSbBdkK3GY5Sp8pump',
+  'HzBH6M6AJQN1C2CNHmpwuBDU3G8LDWj9XkcnnadHpump',
+  '6FfJ7UWmYAdN9tHdFUAj9bu3Ju7ieYKF69gAhdmKpump',
+  'Aigo2DTKEe8tiy85NGVakUBpg8yTCHBjpG4GJpE6pump',
+  '7zgViwJv3H1msPXRNv5PLCXY3BciuA4ZSCFyvaMdM1tq',
+  'CAjtTHvC878f8cZ4zEwdvgjkjFM7rbYN8Mb1go1cpump',
+  '93t6P8wvs5Z8zFfgtZtCfTfH12Y85kYLsJofKb9Kpump',
+  'eZrefiotrkMmxfQTecodmkN6nGCWaCkJHrPx1dzpump',
+  '9d7FG4JCjyXsbHC68YEiuuwcY56iEKt7emnnGQRppump',
+  '9LzYogmHjbSWHs2cjvfX55599st22pqQ3HHcNjQrpump',
+  '2n8Vp7mfsnbgtaxFMgaz9x9J24cNFdBbJGSWrdj3pump',
+  'FzDnTNsE63Dg7o9Hxi2WavVnA2pxXPW1dPtcQa8qpump',
+  '8JvDVZK6CHFhwwBUgZcEy18i1xXQzAHfimYarmoobrrr',
+  '5GAo9yAfLeUEXGofnGGk38Wr7eT6A3cS3atnUfz9pump',
+  'EZAjE7FUxehQQyZAPJXLwk1ZChD439ptbRtuDxckpump',
+  'Dx6KR71Suy7oNiLVNbui3FCd8bxzVPAN5QWkUkunpump',
+  'GE867hKxTki8wAnLyz9Gy1A7zBoAh19zqibL3ajSpump',
+  'Gy5xrHm7xS9UkD8VmiGQrkCBJTSAXCvSdNExzjPmpump',
+  'Ap8AkUCGgTeohHhDvUEUDSV2ZbtBuUxKoXjZu4Jvpump',
+  '71utbKBwCwL22NsJZzeuR23K3BTZaTmzj3X7kzTzpump',
+  'HPddNXimKxGiRXFCEs3G3YrXTNG59GYVETu6o5Vdpump',
+  'FAzroJeLiwHmx2726DhmQPRJaxWMewMm5JTKZDMMbrrr',
+  '4jtLkP2xbdgzCc4BSTeXsxKAbW5FihYn4mFLsfjzgajx',
+  'W6wjBw8HJ65PyyHr9RkTXK7dKvrP1CNkgPWVEHDbrrr',
+  'BwRgwQwMwu6NyAhDomDLNxNtD6ow7V8KtqfpFWzkpump',
+  '3bgXffnNLb2xFjhm11CgLUAr6r4TP1DRXwKLerfDpump',
+  '95rpRd8RQbDgSbNLBZdGHcb69QQiY5PvaVdQX8R7TKiD',
+  'CAsxo2f18fW2hoVNHS3EfpTmjippaa5VQym4DoKNpump',
+  '4ieVKbWPuC2sknY9mJru2eZq44vmBTVfP3GoKm6kpump',
+  'CHmYp6eG6myCaScLq1TmuRMtuqtWysKr3wbYa89upump',
+  '7RoyCo3PRosoRW4fAK8WuFq4WzhBakod4i5Z4rnwpump',
+  '2FNvYCegtNKDo6SdLGaZsketTtDbPNwR7tcVqQiqpump',
+  'GzsKG3ax7dXgkh21jRznnCjGkwQzCcwNpkVuPogmpump',
+  'FiNog7uFddZbdw9dqH6Mc5BPovpBZaRu3eqPeofMpump',
+  'NxxBM1XusWXvcKPUfnMCxQdvxaoHWuw7aBjE7ztpump',
+  '5XaYcVvmBWDJrifS4HGTBKFrbaU8uF6YLoEVk2yDpump',
+  'G6q2AMewci42mzM6TjTtjvSJFd4QBCb7hp9ZuYkApump',
+  'FLnGJdKDeM75ZJhBUkYJBv3hFhFdzHFNxCAEh4oWpump',
+  '6th1zC6uTRvwx3yng5C1ysceyHcZrZ5zF8tzZ2W2pump',
+  'VRFyyivwoe45KQAQXkVYe3hFZecUPUru296p9h4pump',
+  'HZCWadTyq43emXUN2K9KVWqNqHDbSvDXtqmbNk7Jpump',
+  '2sRWSE1pfb7JJiCUZRcbtEAReVbrbDMgE7e5EbBjpump',
+  'DpKKCEEzcCYa5NrugjYcrxDXyz5p5aYPShSJAacEpump',
+  'A2a15Ef6t12AKbXrCKcb7JwmpjHDyQcxw7gijpgpump',
+  '8aUWqkG33238m9d4HotcLwUJQ5DhtmsiU7RmDpjwpump',
+  '9r82a9MZH6cC6uiLW2a1A734upWhTa3Qa9iQuaVqpump',
+  '8PpWhbyiD36sCr4EVoJdEiCbsW2DH4bB32SA8iKjpump',
+  'HsdEMvmoVFiKPXz6c2Xma15UDHjnSAPxd3CeDybapump',
+  'EFokfgeQfTfy439j2rwjMQcrGAhcKKrpsNwUbLDrUG3D',
+  '9DTbLgqPJNki6SBK4bD6z3jPHgzTLBQjDhPicRfnpump',
+  'BRK4RkY1Y4U3pryJbsE8MZo2AjJGQZMZFfEMRiUkpump',
+  '9mztmVjDFi3Fya8Lta3949zPeejWkFTpNLWDqXZXpump',
+  '2Qvkkq9CYreLuoPPzk2xeFBJdTHyBNPSYr3v6XKspump',
+  '5sg6jGEQk6YdkcbHXXEW9zabWwQTdQLJUaBqPW4pump',
+  'gedYAnwEFMog1KMHyCiepmNJJLMeubGKq1Yg9FJpump',
+  '5tFHSTZvoe75F1HRvj4jnVA1SaAZGxFhxdMboZ6Abonk',
+  'o2YQ33bS2utViKgcx3ksEXDCvZ3YNYsKe1DXYEfpump',
+  'DS5SaFW7fSxWWdq8zqTkLyUVwNVNv1tQm4kP8Vx2pump',
+  'ERWNMqSJiaaZgsykpQY9qc7ZTb9uz5MPcegs3qU8pump',
+  'CrJPSvj625TnPdWS42aG5ybMcHeFvnNqq5AExVespump',
+  'BQLd9giHvKHSZSm6ThQntbMAenJjdiPiWTioHiVzpump',
+  'J4QEpZqh6zFJxDRqDthXXvRLiq8g6yZMKF49kXXPb3to',
+  '5CV3qDnwajpmjCbVUDMMy9WFH5o7xeqp6crfF6HMpump',
+  '3VCtqDoVhoXGwWrpeA3gK9FPodfojYZvyAVf2oQfGNuy',
+  '5DyAVDV6yPtML6zLSsvHxfJDv7RFnUs614a1Q1tgpump',
+  '27YyUdXQqT28u6NzpZbyjuh4f6nSTsGFMT72Bcb12bDt',
+  '74siREZJkYMxu89WKyfMzDsYd8x2kEAW2CksYBpFpump',
+  'PjZEccUVFrLGSr6Z2BNx7wcWkKJesEdhWT5ZWQGpump',
+  '5Hx5y6UYdYAvyFfiui3ZsQyqWV7aCUjEzbQ5kUkDpump',
+  '5xSZ28hZPkmpteFXnGkb4sRiLkzh5haKuvYsKC6qpump',
+  '8XD7Q8egbxvDASJ1r6pvoCXMCgsatmTUu421XkF7pump',
+  '91gs7Y6YHFCj6TybSQs55bYvMoLM4FhuDhHineJXpump',
+  'D55RcS7ocJhd1BXTmiuE3LBvJz1KxrRbjqvHFiaXpump'
+];
+
+var REFRESH_INTERVAL = 30000; // 30 giây — tránh rate limit DexScreener
+var tokenAddresses = DEFAULT_TOKENS.slice();
+var coinData = {};      // address → analyzed data
+var paused = false;
+var refreshTimer = null;
+var timerStart = 0;
+var timerRAF = null;
+
+// ===== INIT =====
+document.getElementById('tokenList').value = tokenAddresses.join('\n');
+showLoading();
+fetchAllTokens();
+
+// ===== PARSE ADDRESS =====
+function parseAddr(input) {
+  input = input.trim();
+  if (!input || input.startsWith('#') || input.startsWith('//')) return null;
+  var m = input.match(/dexscreener\.com\/[^\/]+\/([^\/?#]+)/);
+  if (m) return m[1];
+  if (/^[a-zA-Z0-9]{20,}$/.test(input)) return input;
+  return null;
+}
+
+// ===== CONFIG =====
+function applyConfig() {
+  var lines = document.getElementById('tokenList').value.split('\n');
+  var addrs = [];
+  for (var i = 0; i < lines.length; i++) {
+    var a = parseAddr(lines[i]);
+    if (a && addrs.indexOf(a) === -1) addrs.push(a);
+  }
+  if (addrs.length === 0) return;
+  tokenAddresses = addrs.slice(0, 30);
+  coinData = {};
+  showLoading();
+  fetchAllTokens();
+}
+
+// ===== PAUSE =====
+function togglePause() {
+  paused = !paused;
+  var btn = document.getElementById('pauseBtn');
+  var dot = document.getElementById('statusDot');
+  if (paused) {
+    btn.textContent = '▶ Tiếp tục';
+    dot.classList.add('paused');
+    clearTimeout(refreshTimer);
+    cancelAnimationFrame(timerRAF);
+  } else {
+    btn.textContent = '⏸ Dừng';
+    dot.classList.remove('paused');
+    scheduleRefresh();
+  }
+}
+
+// ===== FETCH ALL TOKENS =====
+function fetchAllTokens() {
+  document.getElementById('statusText').textContent = 'Đang tải ' + tokenAddresses.length + ' token...';
+
+  // Chia batch tối đa 5 token/request để tránh 400 Bad Request
+  var BATCH_SIZE = 5;
+  var batches = [];
+  for (var i = 0; i < tokenAddresses.length; i += BATCH_SIZE) {
+    batches.push(tokenAddresses.slice(i, i + BATCH_SIZE));
+  }
+
+  var byToken = {};
+  var totalBatches = batches.length;
+
+  function processBatch(idx) {
+    if (idx >= totalBatches) {
+      // Tất cả batch xong → analyze & render
+      for (var j = 0; j < tokenAddresses.length; j++) {
+        var a = tokenAddresses[j];
+        if (byToken[a]) {
+          coinData[a] = analyzeToken(byToken[a]);
+        } else if (!coinData[a]) {
+          coinData[a] = { symbol: a.substring(0,6) + '...', zone: 'unknown', notable: false, error: true };
+        }
+      }
+      renderBubbles();
+      var now = new Date();
+      document.getElementById('statusText').textContent = 'Cập nhật: ' + now.toLocaleTimeString() + ' — ' + Object.keys(byToken).length + '/' + tokenAddresses.length + ' token';
+      scheduleRefresh();
+      return;
+    }
+
+    var batch = batches[idx];
+    var url = 'https://api.dexscreener.com/latest/dex/tokens/' + batch.join(',');
+
+    fetch(url)
+      .then(function(res) { return res.ok ? res.json() : null; })
+      .then(function(data) {
+        if (data && data.pairs) {
+          for (var i = 0; i < data.pairs.length; i++) {
+            var p = data.pairs[i];
+            var addr = p.baseToken && p.baseToken.address;
+            if (!addr) continue;
+            if (!byToken[addr] || ((p.liquidity && p.liquidity.usd) || 0) > ((byToken[addr].liquidity && byToken[addr].liquidity.usd) || 0)) {
+              byToken[addr] = p;
+            }
+          }
+        }
+        document.getElementById('statusText').textContent = 'Đang tải... (' + (idx + 1) + '/' + totalBatches + ')';
+        processBatch(idx + 1);
+      })
+      .catch(function() {
+        processBatch(idx + 1);
+      });
+  }
+
+  processBatch(0);
+}
+
+// ===== ANALYZE TOKEN (simplified from coin-analyzer logic) =====
+function analyzeToken(p) {
+  var d = {};
+  d.symbol = (p.baseToken && p.baseToken.symbol) || '???';
+  d.name = (p.baseToken && p.baseToken.name) || '';
+  d.address = (p.baseToken && p.baseToken.address) || '';
+  d.price = p.priceUsd ? parseFloat(p.priceUsd) : 0;
+  d.mcap = p.marketCap || p.fdv || 0;
+  d.liq = (p.liquidity && typeof p.liquidity.usd === 'number') ? p.liquidity.usd : 0;
+  d.vol24h = (p.volume && p.volume.h24) || 0;
+  d.volH1 = (p.volume && p.volume.h1) || 0;
+  d.volM5 = (p.volume && p.volume.m5) || 0;
+  d.chgM5 = (p.priceChange && p.priceChange.m5) || null;
+  d.chgH1 = (p.priceChange && p.priceChange.h1) || null;
+  d.chgH6 = (p.priceChange && p.priceChange.h6) || null;
+  d.chgH24 = (p.priceChange && p.priceChange.h24) || 0;
+  d.dexId = p.dexId || '';
+  d.chainId = p.chainId || '';
+  d.url = p.url || ('https://dexscreener.com/' + d.chainId + '/' + (p.pairAddress || d.address));
+  d.logo = (p.info && p.info.imageUrl) || '';
+
+  // Txns
+  var buys24 = 0, sells24 = 0, buysH1 = 0, sellsH1 = 0;
+  if (p.txns) {
+    if (p.txns.h24) { buys24 = p.txns.h24.buys || 0; sells24 = p.txns.h24.sells || 0; }
+    if (p.txns.h1) { buysH1 = p.txns.h1.buys || 0; sellsH1 = p.txns.h1.sells || 0; }
+  }
+  d.buys24 = buys24; d.sells24 = sells24;
+  var totalTxns = buys24 + sells24;
+  d.buyPressure = totalTxns > 0 ? (buys24 / totalTxns * 100) : 0;
+
+  // Socials
+  var socialCount = 0;
+  if (p.info && p.info.socials) socialCount += p.info.socials.length;
+  if (p.info && p.info.websites && p.info.websites.length > 0) socialCount++;
+  d.socialCount = socialCount;
+
+  // Volume adjust (stale detection)
+  var vol = d.vol24h;
+  if (d.volH1 > 0 && vol > 0) {
+    var h1Est = d.volH1 * 24;
+    if (h1Est < vol * 0.2) vol = h1Est;
+  }
+  d.volAdj = vol;
+
+  // ===== NOTABLE CRITERIA (10 items, same as coin-analyzer) =====
+  var vmr = d.mcap > 0 ? d.volAdj / d.mcap : 0;
+  var lmr = d.mcap > 0 ? d.liq / d.mcap : 0;
+  var pass = 0;
+
+  if (vmr >= 0.3) pass++;                          // 1. Vol/MCap
+  if (d.liq >= 15000) pass++;                       // 2. Liquidity
+  if (d.buyPressure >= 52 || totalTxns === 0) pass++; // 3. Buy Pressure
+  if (d.mcap >= 20000 && d.mcap <= 5000000) pass++; // 4. MCap range
+  // 5. AI score (simplified)
+  var aiScore = 0;
+  if (vmr >= 3) aiScore += 30; else if (vmr >= 1.5) aiScore += 25; else if (vmr >= 0.5) aiScore += 18; else if (vmr >= 0.2) aiScore += 12; else aiScore += 5;
+  if (lmr >= 0.2) aiScore += 15; else if (lmr >= 0.1) aiScore += 12; else if (lmr >= 0.05) aiScore += 8; else aiScore += 3;
+  if (d.buyPressure >= 60) aiScore += 15; else if (d.buyPressure >= 50) aiScore += 10; else aiScore += 5;
+  if (d.mcap >= 50000 && d.mcap <= 2000000) aiScore += 10; else if (d.mcap > 0) aiScore += 3;
+  if (socialCount >= 2) aiScore += 5; else if (socialCount >= 1) aiScore += 3;
+  aiScore = Math.min(aiScore, 100);
+  d.aiScore = aiScore;
+  if (aiScore >= 65) pass++;                        // 5. AI Score
+  pass++;                                           // 6. Security (assume OK, can't verify)
+  if (socialCount >= 1) pass++;                     // 7. Social
+  if (lmr >= 0.15) pass++;                          // 8. Liq/MCap
+  if (d.chgH24 > -20) pass++;                       // 9. Price stable (siết từ -40 → -20)
+  pass++;                                           // 10. No red flags (assume, can't verify whale/dev)
+  d.notablePass = pass;
+  d.notable = pass >= 7;
+  d.grade = pass >= 9 ? 'S' : pass >= 7 ? 'A' : pass >= 5 ? 'B' : 'C';
+
+  // ===== ZONE DETECTION (synced with coin-analyzer) =====
+  var pm5 = d.chgM5, ph1 = d.chgH1, ph6 = d.chgH6, ph24 = d.chgH24;
+  var recentVolDead = d.volH1 < 500 || d.volM5 < 10;
+  var liqThin = d.liq < 15000;
+  var isLikelyDead = (d.chgH24 < -80) || (d.mcap < 5000 && d.liq < 3000) || (recentVolDead && liqThin && d.chgH24 < -10);
+  var isDyingMom = recentVolDead && !isLikelyDead;
+
+  var shortDump = pm5 !== null && pm5 < -10;
+  var midDump = ph1 !== null && ph1 < -20;
+  var shortPump = pm5 !== null && pm5 > 15;
+  var midPump = ph1 !== null && ph1 > 30;
+  var bigPump = ph6 !== null && ph6 > 50;
+  var retracing = (ph1 !== null && ph1 > 20) && (pm5 !== null && pm5 < 0);
+  var volDying = d.volM5 > 0 && d.volH1 > 0 && (d.volM5 * 12 < d.volH1 * 0.3);
+
+  // Danger thresholds (đồng bộ với analyzer)
+  var h24Crash = ph24 < -50;           // was -70
+  var h6Crash = ph6 !== null && ph6 < -30;  // was -50
+  var vdz = (d.volH1 < 50) || (d.volM5 < 5);
+  var isDead = (ph24 < -70) || (ph6 !== null && ph6 < -50) || (vdz && d.liq < 10000) || isLikelyDead;
+
+  // Composite multi-TF weakness
+  var multiTFWeak = (ph1 !== null && ph1 < -10) && (ph24 < -30);
+  var h1Dump = ph1 !== null && ph1 < -15;
+
+  // Post-pump crash / post-peak retrace (mới)
+  var postPumpCrash = (ph24 > 50) && (ph1 !== null && ph1 < -15);
+  var postPeakRetrace = (ph6 !== null && ph6 > 30) && (ph1 !== null && ph1 < 0);
+
+  var qualityWeak = pass < 7 || aiScore < 60;
+  var tqBad = pass < 4;
+  var tooManyFlags = d.chgH24 < -40 || (d.liq < 5000 && d.liq > 0);
+
+  if (isDead || h24Crash || h6Crash || (midDump && shortDump) || (tqBad && tooManyFlags) || (multiTFWeak && tqBad)) {
+    d.zone = 'danger'; d.zoneLabel = isDead ? 'DEAD' : 'NGUY HIỂM'; d.zoneIcon = '🔴';
+  } else if (postPumpCrash || postPeakRetrace || ((midPump || bigPump) && (retracing || shortDump || volDying))) {
+    d.zone = 'takeprofit'; d.zoneLabel = postPumpCrash ? 'SẬP SAU PUMP' : 'CHỐT LỜI'; d.zoneIcon = '💰';
+  } else if (ph24 < -20 || (h1Dump && ph24 < -10) || multiTFWeak) {
+    d.zone = 'caution'; d.zoneLabel = 'ĐANG GIẢM'; d.zoneIcon = '📉';
+  } else if (shortPump || midPump) {
+    d.zone = 'hold'; d.zoneLabel = 'GIỮ'; d.zoneIcon = '⚡';
+  } else if (isDyingMom) {
+    d.zone = 'caution'; d.zoneLabel = 'ĐANG TỤT'; d.zoneIcon = '📉';
+  } else if (qualityWeak || tooManyFlags || ph24 < -10) {
+    d.zone = 'caution'; d.zoneLabel = ph24 < -10 ? 'GIẢM NHẸ' : 'CẨN THẬN'; d.zoneIcon = '⚠️';
+  } else {
+    d.zone = 'entry'; d.zoneLabel = 'ENTRY'; d.zoneIcon = '🟢';
+  }
+
+  d.error = false;
+  return d;
+}
+
+// ===== FORMAT =====
+function fmt(n) {
+  if (n >= 1e9) return '$' + (n/1e9).toFixed(1) + 'B';
+  if (n >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return '$' + (n/1e3).toFixed(1) + 'K';
+  return '$' + n.toFixed(0);
+}
+function fmtPrice(n) {
+  if (n === 0) return '$?';
+  if (n >= 1) return '$' + n.toFixed(2);
+  if (n >= 0.001) return '$' + n.toFixed(4);
+  // Count leading zeros after decimal
+  var s = n.toFixed(20);
+  var m = s.match(/^0\.(0+)/);
+  if (m && m[1].length >= 4) {
+    var zeros = m[1].length;
+    var sig = n * Math.pow(10, zeros + 1);
+    return '$0.0{' + zeros + '}' + sig.toFixed(2);
+  }
+  return '$' + n.toFixed(8);
+}
+
+// ===== RENDER =====
+function renderBubbles() {
+  var notableCoins = [], otherCoins = [];
+  // Thứ tự: ENTRY > Chốt lời > Hold > Cẩn thận > Nguy hiểm
+  var zoneOrder = { entry: 0, takeprofit: 1, hold: 2, caution: 3, danger: 4, unknown: 5 };
+
+  for (var i = 0; i < tokenAddresses.length; i++) {
+    var a = tokenAddresses[i];
+    var c = coinData[a];
+    if (!c) continue;
+    // Ẩn DEAD tokens
+    if (c.zone === 'danger' && c.zoneLabel === 'DEAD') continue;
+    if (c.error) continue;
+
+    // Vùng "đáng chú ý": ENTRY lên đầu, hoặc notable + không nguy hiểm
+    if (c.zone === 'entry' || (c.notable && c.zone !== 'danger' && c.zone !== 'caution')) {
+      notableCoins.push(c);
+    } else {
+      otherCoins.push(c);
+    }
+  }
+
+  // Sort notable: Entry first, then by grade
+  notableCoins.sort(function(a,b) {
+    var zo = (zoneOrder[a.zone]||5) - (zoneOrder[b.zone]||5);
+    if (zo !== 0) return zo;
+    var ga = {S:0,A:1,B:2,C:3}; return (ga[a.grade]||3) - (ga[b.grade]||3);
+  });
+  // Sort others: Entry > Chốt lời > Hold > Cẩn thận > Nguy hiểm
+  otherCoins.sort(function(a,b) {
+    return (zoneOrder[a.zone]||5) - (zoneOrder[b.zone]||5);
+  });
+
+  document.getElementById('notableCount').textContent = notableCoins.length;
+  document.getElementById('othersCount').textContent = otherCoins.length;
+
+  document.getElementById('notableGrid').innerHTML = notableCoins.length > 0 ?
+    notableCoins.map(makeBubbleHTML).join('') :
+    '<div class="zone-empty">Chưa có coin nào đáng chú ý — chờ data cập nhật...</div>';
+
+  var othersEl = document.getElementById('othersGrid');
+  if (otherCoins.length === 0) {
+    othersEl.innerHTML = '<div class="zone-empty">Trống</div>';
+  } else {
+    var allHTML = otherCoins.map(makeBubbleHTML).join('');
+    var showMore = !othersExpanded && otherCoins.length > OTHERS_VISIBLE_ROWS * COLS_PER_ROW;
+    if (showMore) {
+      var visibleCount = OTHERS_VISIBLE_ROWS * COLS_PER_ROW;
+      var visibleHTML = otherCoins.slice(0, visibleCount).map(makeBubbleHTML).join('');
+      var hiddenHTML = otherCoins.slice(visibleCount).map(makeBubbleHTML).join('');
+      othersEl.innerHTML = visibleHTML
+        + '<div class="others-hidden" id="othersHidden" style="display:none;contents:none;">' + hiddenHTML + '</div>'
+        + '<button class="show-more-btn" id="showMoreBtn" onclick="expandOthers()">▼ Xem thêm ' + (otherCoins.length - visibleCount) + ' coin</button>';
+    } else {
+      othersEl.innerHTML = allHTML;
+      if (othersExpanded && otherCoins.length > OTHERS_VISIBLE_ROWS * COLS_PER_ROW) {
+        othersEl.innerHTML += '<button class="show-more-btn" onclick="collapseOthers()">▲ Thu gọn</button>';
+      }
+    }
+  }
+}
+
+var othersExpanded = false;
+var OTHERS_VISIBLE_ROWS = 3;
+var COLS_PER_ROW = Math.max(1, Math.floor((window.innerWidth - 32) / 165));
+window.addEventListener('resize', function() { COLS_PER_ROW = Math.max(1, Math.floor((window.innerWidth - 32) / 165)); });
+
+function expandOthers() {
+  othersExpanded = true;
+  var hidden = document.getElementById('othersHidden');
+  if (hidden) { hidden.style.display = 'contents'; }
+  var btn = document.getElementById('showMoreBtn');
+  if (btn) { btn.textContent = '▲ Thu gọn'; btn.onclick = collapseOthers; }
+}
+function collapseOthers() {
+  othersExpanded = false;
+  renderBubbles();
+}
+
+function makeBubbleHTML(c) {
+  if (c.error) {
+    return '<div class="bubble z-dead"><div class="bubble-top"><span class="bubble-symbol">' + c.symbol + '</span></div><div class="bubble-price" style="color:var(--red)">Không load được</div></div>';
+  }
+
+  var zoneColors = { entry:'var(--green)', hold:'var(--cyan)', takeprofit:'var(--orange)', caution:'var(--yellow)', danger:'var(--red)' };
+  var zc = zoneColors[c.zone] || 'var(--dim)';
+  var chg = c.chgH1 !== null ? c.chgH1 : c.chgH24;
+  var chgStr = chg !== null ? ((chg >= 0 ? '+' : '') + chg.toFixed(1) + '%') : '—';
+  var chgColor = chg !== null ? (chg >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--dim)';
+
+  var logoHtml = c.logo ?
+    '<img class="bubble-logo" src="' + c.logo + '" onerror="this.style.display=\'none\'">' :
+    '<div class="bubble-logo-placeholder">' + (c.symbol.charAt(0) || '?') + '</div>';
+
+  var analyzerUrl = 'coin-analyzer.html?url=' + encodeURIComponent(c.url);
+  var escapedDexUrl = c.url.replace(/'/g, "\\'");
+  var escapedSymbol = c.symbol.replace(/'/g, "\\'");
+
+  var html = '<div class="bubble z-' + c.zone + (c.notable ? ' notable' : '') + '" onclick="window.open(\'' + analyzerUrl + '\',\'_blank\')">'
+    + '<div class="glow"></div>'
+    + '<div class="bubble-top">'
+    + '<div class="bubble-id">' + logoHtml + '<span class="bubble-symbol">' + c.symbol + '</span></div>'
+    + '<span class="bubble-zone-tag" style="color:' + zc + ';background:' + zc.replace(')', ',0.12)').replace('var(', 'rgba(').replace('--green', '34,197,94').replace('--cyan', '6,182,212').replace('--orange', '249,115,22').replace('--yellow', '234,179,8').replace('--red', '239,68,68') + '">' + c.zoneIcon + ' ' + c.zoneLabel + '</span>'
+    + '</div>'
+    + '<div class="bubble-price">' + fmtPrice(c.price) + '</div>'
+    + '<div class="bubble-row">'
+    + '<span class="bubble-change" style="color:' + chgColor + '">' + chgStr + '</span>'
+    + '<span class="bubble-mcap">' + fmt(c.mcap) + '</span>'
+    + '</div>'
+    + '<div class="bubble-vol">Vol: ' + fmt(c.volAdj) + ' | Liq: ' + fmt(c.liq) + '</div>'
+    + '<div class="bubble-grade" style="color:' + zc + '">' + c.grade + ' ' + c.notablePass + '/10</div>'
+    + '<div class="bubble-actions">'
+    + '<button class="btn-view-dex" onclick="event.stopPropagation();window.open(\'' + escapedDexUrl + '\',\'_blank\')">🔗 View Dex</button>'
+    + '<button class="btn-copy-name" onclick="event.stopPropagation();copyName(this,\'' + escapedSymbol + '\')">📋 Copy Name</button>'
+    + '</div>'
+    + '</div>';
+  return html;
+}
+
+function copyName(btn, name) {
+  navigator.clipboard.writeText(name).then(function() {
+    btn.textContent = '✅ Copied!';
+    btn.classList.add('copied');
+    setTimeout(function() { btn.textContent = '📋 Copy Name'; btn.classList.remove('copied'); }, 1500);
+  }).catch(function() {
+    // Fallback
+    var ta = document.createElement('textarea');
+    ta.value = name; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+    btn.textContent = '✅ Copied!';
+    btn.classList.add('copied');
+    setTimeout(function() { btn.textContent = '📋 Copy Name'; btn.classList.remove('copied'); }, 1500);
+  });
+}
+
+// ===== LOADING SKELETON =====
+function showLoading() {
+  var skel = '';
+  for (var i = 0; i < tokenAddresses.length; i++) {
+    skel += '<div class="bubble loading"></div>';
+  }
+  document.getElementById('othersGrid').innerHTML = skel;
+  document.getElementById('notableGrid').innerHTML = '<div class="zone-empty">Đang tải...</div>';
+}
+
+// ===== REFRESH TIMER =====
+function scheduleRefresh() {
+  if (paused) return;
+  timerStart = Date.now();
+  clearTimeout(refreshTimer);
+
+  // Animate timer bar
+  function animateTimer() {
+    var elapsed = Date.now() - timerStart;
+    var pct = Math.max(0, 100 - (elapsed / REFRESH_INTERVAL * 100));
+    document.getElementById('timerFill').style.width = pct + '%';
+    if (pct > 0 && !paused) timerRAF = requestAnimationFrame(animateTimer);
+  }
+  cancelAnimationFrame(timerRAF);
+  animateTimer();
+
+  refreshTimer = setTimeout(function() {
+    if (!paused) fetchAllTokens();
+  }, REFRESH_INTERVAL);
+}
+</script>
+</body>
+</html>

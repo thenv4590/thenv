@@ -3,1056 +3,731 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Memecoin Analyzer — Nên Mua hay Bán?</title>
+<title>Coin Analyzer</title>
 <style>
   :root {
-    --bg-page: #0a0b10;
-    --bg-card: #111827;
-    --bg-elevated: #1a1e2e;
-    --bg-input: #0d1117;
-    --cyan: #06b6d4;
-    --green: #22c55e;
-    --yellow: #eab308;
-    --orange: #f97316;
-    --red: #ef4444;
-    --purple: #a855f7;
-    --blue: #3b82f6;
-    --text-primary: #f1f5f9;
-    --text-body: #94a3b8;
-    --text-muted: #64748b;
+    --bg: #0a0b10; --card: #111827; --elevated: #1a1e2e; --input: #0d1117;
+    --cyan: #06b6d4; --green: #22c55e; --yellow: #eab308;
+    --orange: #f97316; --red: #ef4444; --purple: #a855f7; --blue: #3b82f6;
+    --text: #f1f5f9; --body: #94a3b8; --muted: #64748b;
     --border: rgba(255,255,255,0.08);
   }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: 'Segoe UI', Inter, system-ui, -apple-system, sans-serif;
-    background: var(--bg-page); color: var(--text-primary);
-    line-height: 1.6; min-height: 100vh;
-  }
-  .container { max-width: 900px; margin: 0 auto; padding: 24px 16px 60px; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Segoe UI',Inter,system-ui,sans-serif; background:var(--bg); color:var(--text); line-height:1.4; overflow-x:hidden; }
+  html, body { height:100%; }
 
-  /* Header */
-  .header { text-align: center; margin-bottom: 32px; padding: 32px 0; border-bottom: 1px solid var(--border); }
-  .header h1 {
-    font-size: 28px; font-weight: 700;
-    background: linear-gradient(135deg, var(--cyan), var(--blue));
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-    margin-bottom: 8px;
+  /* Top bar */
+  .topbar {
+    position:sticky; top:0; z-index:100; background:rgba(10,11,16,0.95); backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--border); padding:8px 16px;
+    display:flex; align-items:center; gap:10px;
   }
-  .header p { color: var(--text-muted); font-size: 14px; }
+  .topbar input {
+    flex:1; background:var(--input); border:1px solid var(--border); border-radius:8px;
+    padding:8px 14px; color:var(--text); font-size:13px; outline:none; min-width:0;
+  }
+  .topbar input:focus { border-color:var(--cyan); }
+  .topbar input::placeholder { color:var(--muted); }
+  .topbar .btn {
+    padding:8px 20px; border:none; border-radius:8px;
+    background:linear-gradient(135deg,var(--cyan),var(--blue));
+    color:#fff; font-weight:700; font-size:13px; cursor:pointer; white-space:nowrap;
+  }
+  .topbar .btn:disabled { opacity:0.5; cursor:not-allowed; }
+  .topbar .status { font-size:11px; color:var(--muted); white-space:nowrap; }
+  .topbar .status.error { color:var(--red); }
+  .topbar .status.success { color:var(--green); }
+  .topbar .status.loading { color:var(--cyan); }
+  .refresh-info { font-size:10px; color:var(--muted); display:flex; align-items:center; gap:4px; }
+  .refresh-info .dot { width:6px; height:6px; border-radius:50%; background:var(--green); animation:pulse 2s infinite; }
+  .refresh-info .dot.paused { background:var(--muted); animation:none; }
+  .refresh-info button {
+    background:none; border:1px solid var(--border); border-radius:4px;
+    color:var(--muted); font-size:10px; padding:1px 6px; cursor:pointer;
+  }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+  .spin { display:inline-block; animation:spin 1s linear infinite; }
+  @keyframes spin { to{transform:rotate(360deg);} }
 
-  /* DexScreener Import */
-  .dex-import {
-    background: linear-gradient(135deg, rgba(6,182,212,0.08), rgba(59,130,246,0.08));
-    border: 1px solid rgba(6,182,212,0.2);
-    border-radius: 14px; padding: 24px; margin-bottom: 24px;
+  /* Dashboard */
+  #dashboard { display:none; height:calc(100vh - 50px); }
+  #dashboard.show { display:grid; }
+  .dash-grid {
+    display:grid; grid-template-columns:1fr 380px; grid-template-rows:auto 1fr;
+    height:100%; overflow:hidden;
   }
-  .dex-import h3 { font-size: 15px; margin-bottom: 4px; color: var(--cyan); }
-  .dex-import .sub { font-size: 12px; color: var(--text-muted); margin-bottom: 14px; }
-  .dex-row { display: flex; gap: 10px; }
-  .dex-row input {
-    flex: 1; background: var(--bg-input); border: 1px solid var(--border);
-    border-radius: 10px; padding: 12px 16px; color: var(--text-primary);
-    font-size: 14px; outline: none; transition: border-color 0.2s;
-  }
-  .dex-row input:focus { border-color: var(--cyan); box-shadow: 0 0 0 2px rgba(6,182,212,0.15); }
-  .dex-row input::placeholder { color: var(--text-muted); }
-  .fetch-btn {
-    padding: 12px 28px; border: none; border-radius: 10px;
-    background: linear-gradient(135deg, var(--cyan), var(--blue));
-    color: #fff; font-weight: 700; font-size: 14px;
-    cursor: pointer; transition: all 0.2s; white-space: nowrap;
-  }
-  .fetch-btn:hover { box-shadow: 0 4px 20px rgba(6,182,212,0.3); transform: translateY(-1px); }
-  .fetch-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
-  .fetch-status {
-    margin-top: 12px; font-size: 13px; min-height: 20px;
-    display: flex; align-items: center; gap: 8px;
-  }
-  .fetch-status.loading { color: var(--cyan); }
-  .fetch-status.success { color: var(--green); }
-  .fetch-status.error { color: var(--red); }
-  .spin { display: inline-block; animation: spin 1s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
+  @media(max-width:900px) { .dash-grid { grid-template-columns:1fr; grid-template-rows:auto auto 1fr; } }
 
-  /* Auto-filled indicator */
-  .auto-tag {
-    display: inline-block; font-size: 10px; padding: 1px 6px;
-    background: rgba(6,182,212,0.15); color: var(--cyan);
-    border-radius: 4px; margin-left: 6px; vertical-align: middle;
-    font-weight: 600; letter-spacing: 0.3px;
+  /* Info strip */
+  .info-strip {
+    grid-column:1/-1; display:flex; align-items:center; gap:8px;
+    padding:8px 16px; border-bottom:1px solid var(--border);
+    background:var(--card); overflow-x:auto; flex-wrap:nowrap;
+  }
+  .info-strip .coin-id { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+  .info-strip .coin-id img { width:28px; height:28px; border-radius:50%; }
+  .info-strip .coin-name { font-size:16px; font-weight:700; }
+  .info-strip .chain { font-size:10px; padding:1px 6px; border-radius:3px; background:rgba(168,85,247,0.15); color:var(--purple); font-weight:600; text-transform:uppercase; }
+  .info-strip .price-big { font-size:18px; font-weight:700; margin-left:auto; flex-shrink:0; }
+  .info-strip .chg { font-size:13px; font-weight:600; flex-shrink:0; }
+
+  .stat-pill {
+    display:flex; align-items:center; gap:4px; padding:4px 10px;
+    background:var(--elevated); border-radius:6px; font-size:11px; flex-shrink:0;
+  }
+  .stat-pill .sv { font-weight:700; color:var(--text); }
+  .stat-pill .sl { color:var(--muted); }
+
+  /* Left: chart */
+  .chart-area { border-right:1px solid var(--border); overflow:hidden; min-height:300px; }
+  .chart-area iframe { width:100%; height:100%; border:none; }
+  @media(max-width:900px) { .chart-area { grid-column:1/-1; min-height:350px; border-right:none; border-bottom:1px solid var(--border); } }
+
+  /* Right: analysis panel */
+  .panel { overflow-y:auto; padding:10px 14px; display:flex; flex-direction:column; gap:10px; }
+  @media(max-width:900px) { .panel { grid-column:1/-1; } }
+
+  /* Verdict card */
+  .verdict-card {
+    text-align:center; padding:14px; border-radius:10px;
+    border:1px solid var(--border); background:var(--card); position:relative;
+  }
+  .verdict-card .v-icon { font-size:32px; }
+  .verdict-card .v-text { font-size:22px; font-weight:800; margin:2px 0; }
+  .verdict-card .v-sub { font-size:11px; color:var(--body); }
+
+  /* Zone strip */
+  .zone-strip {
+    display:flex; align-items:center; gap:8px; padding:10px 12px;
+    border-radius:10px; border:1px solid var(--border);
+  }
+  .zone-strip .z-icon { font-size:24px; flex-shrink:0; }
+  .zone-strip .z-info { flex:1; min-width:0; }
+  .zone-strip .z-title { font-size:13px; font-weight:700; }
+  .zone-strip .z-desc { font-size:10px; color:var(--body); line-height:1.3; }
+  .zone-strip .z-signals { display:flex; gap:4px; flex-wrap:wrap; margin-top:4px; }
+  .zone-strip .z-sig {
+    font-size:9px; padding:1px 6px; border-radius:4px; font-weight:600;
+  }
+  .zone-meter { display:flex; gap:2px; height:4px; border-radius:2px; overflow:hidden; margin-top:6px; }
+  .zone-meter div { flex:1; border-radius:2px; }
+
+  /* Score rings row */
+  .score-row { display:flex; justify-content:space-around; padding:6px 0; }
+  .score-item { text-align:center; }
+  .score-ring { width:56px; height:56px; position:relative; }
+  .score-ring svg { transform:rotate(-90deg); }
+  .score-ring circle { fill:none; stroke-width:5; }
+  .score-ring .bg { stroke:var(--elevated); }
+  .score-ring .fg { stroke-linecap:round; }
+  .score-val { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:700; }
+  .score-label { font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; margin-top:2px; }
+
+  /* Breakdown bars */
+  .bd-list { display:flex; flex-direction:column; gap:4px; }
+  .bd-row {
+    display:flex; align-items:center; gap:6px; padding:4px 8px;
+    background:var(--elevated); border-radius:6px; border-left:3px solid var(--muted);
+    font-size:11px;
+  }
+  .bd-row .bl { flex:1; color:var(--body); }
+  .bd-row .bw { width:60px; height:4px; background:var(--card); border-radius:2px; overflow:hidden; }
+  .bd-row .bf { height:100%; border-radius:2px; }
+  .bd-row .bv { min-width:24px; text-align:right; font-weight:600; }
+
+  /* Notable criteria compact */
+  .notable-bar {
+    padding:8px 10px; border-radius:10px; border:1px solid var(--border);
+  }
+  .notable-bar .nb-head { display:flex; align-items:center; gap:6px; margin-bottom:6px; }
+  .notable-bar .nb-grade { font-size:13px; font-weight:800; }
+  .notable-bar .nb-pass { font-size:11px; color:var(--body); }
+  .crit-grid { display:grid; grid-template-columns:1fr 1fr; gap:3px; }
+  .crit-item {
+    display:flex; align-items:center; gap:4px; font-size:10px; padding:2px 6px;
+    border-radius:4px; background:rgba(255,255,255,0.02);
+  }
+  .crit-item.pass { color:var(--green); }
+  .crit-item.fail { color:var(--red); opacity:0.7; }
+
+  /* Red flags compact */
+  .rf-list { display:flex; flex-direction:column; gap:3px; }
+  .rf-item {
+    font-size:10px; padding:4px 8px; border-radius:6px;
+    background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.15);
+    color:var(--body); line-height:1.3;
   }
 
-  /* Sections */
-  .section {
-    background: var(--bg-card); border-radius: 12px;
-    border: 1px solid var(--border); margin-bottom: 20px; overflow: hidden;
+  /* Welcome */
+  .welcome {
+    display:flex; align-items:center; justify-content:center;
+    height:calc(100vh - 50px); text-align:center; color:var(--muted);
   }
-  .section-header {
-    display: flex; align-items: center; gap: 12px;
-    padding: 16px 20px; cursor: pointer; user-select: none; transition: background 0.2s;
-  }
-  .section-header:hover { background: rgba(255,255,255,0.02); }
-  .section-icon {
-    width: 36px; height: 36px; border-radius: 10px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 18px; flex-shrink: 0;
-  }
-  .section-header h2 { font-size: 16px; font-weight: 600; flex: 1; }
-  .section-header .chevron { color: var(--text-muted); transition: transform 0.3s; font-size: 12px; }
-  .section-header.collapsed .chevron { transform: rotate(-90deg); }
-  .section-body { padding: 0 20px 20px; transition: all 0.3s ease; }
-  .section-body.hidden { display: none; }
-
-  /* Form */
-  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } .dex-row { flex-direction: column; } }
-  .field { display: flex; flex-direction: column; gap: 6px; }
-  .field > label { font-size: 13px; color: var(--text-body); font-weight: 500; }
-  .field > label .hint { font-weight: 400; color: var(--text-muted); font-size: 11px; }
-  .field input, .field select {
-    background: var(--bg-input); border: 1px solid var(--border);
-    border-radius: 8px; padding: 10px 14px; color: var(--text-primary);
-    font-size: 14px; outline: none; transition: border-color 0.2s; width: 100%;
-  }
-  .field input:focus, .field select:focus { border-color: var(--cyan); box-shadow: 0 0 0 2px rgba(6,182,212,0.15); }
-  .field input::placeholder { color: var(--text-muted); }
-  .field input.auto-filled { border-color: rgba(6,182,212,0.3); background: rgba(6,182,212,0.04); }
-
-  /* Toggle */
-  .toggle-group { display: flex; gap: 8px; flex-wrap: wrap; }
-  .toggle-btn {
-    padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border);
-    background: var(--bg-input); color: var(--text-body);
-    cursor: pointer; font-size: 13px; transition: all 0.2s;
-  }
-  .toggle-btn:hover { border-color: var(--cyan); color: var(--text-primary); }
-  .toggle-btn.active {
-    background: rgba(6,182,212,0.15); border-color: var(--cyan);
-    color: var(--cyan); font-weight: 600;
-  }
-
-  /* Checklist */
-  .checklist { display: flex; flex-direction: column; gap: 10px; }
-  .check-item {
-    display: flex; align-items: center; gap: 10px;
-    padding: 10px 14px; background: var(--bg-input); border-radius: 8px;
-    border: 1px solid var(--border); cursor: pointer;
-    transition: all 0.2s; font-size: 14px; color: var(--text-body);
-  }
-  .check-item:hover { border-color: rgba(255,255,255,0.15); }
-  .check-box {
-    width: 20px; height: 20px; border: 2px solid var(--text-muted);
-    border-radius: 5px; display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0; transition: all 0.2s; font-size: 12px; color: transparent;
-  }
-  .check-item.checked .check-box { background: var(--green); border-color: var(--green); color: #fff; }
-  .check-item.checked { border-color: rgba(34,197,94,0.3); color: var(--text-primary); }
-  .check-item.is-red.checked .check-box { background: var(--red); border-color: var(--red); }
-  .check-item.is-red.checked { border-color: rgba(239,68,68,0.3); }
-
-  /* Buttons */
-  .analyze-btn {
-    width: 100%; padding: 16px; border: none; border-radius: 12px;
-    font-size: 16px; font-weight: 700; cursor: pointer;
-    background: linear-gradient(135deg, var(--cyan), var(--blue));
-    color: #fff; transition: all 0.3s; margin-top: 8px; letter-spacing: 0.5px;
-  }
-  .analyze-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 30px rgba(6,182,212,0.3); }
-  .analyze-btn:active { transform: translateY(0); }
-
-  /* Results */
-  #results { display: none; }
-  #results.show { display: block; }
-  .result-verdict {
-    text-align: center; padding: 40px 24px; border-radius: 16px;
-    margin-bottom: 24px; position: relative; overflow: hidden;
-  }
-  .result-verdict::before {
-    content: ''; position: absolute; inset: 0; border-radius: 16px; padding: 2px;
-    background: linear-gradient(135deg, var(--cyan), var(--blue));
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor; mask-composite: exclude;
-  }
-  .verdict-icon { font-size: 56px; margin-bottom: 12px; }
-  .verdict-label { font-size: 14px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 4px; }
-  .verdict-text { font-size: 32px; font-weight: 800; margin-bottom: 8px; }
-  .verdict-sub { font-size: 15px; color: var(--text-body); max-width: 600px; margin: 0 auto; }
-
-  /* Token Header (result) */
-  .token-header {
-    display: flex; align-items: center; gap: 16px;
-    padding: 16px 20px; background: var(--bg-card);
-    border-radius: 12px; border: 1px solid var(--border);
-    margin-bottom: 20px;
-  }
-  .token-header img { width: 48px; height: 48px; border-radius: 50%; background: var(--bg-elevated); }
-  .token-header .info { flex: 1; }
-  .token-header .name { font-size: 18px; font-weight: 700; }
-  .token-header .chain-badge {
-    font-size: 11px; padding: 2px 8px; border-radius: 4px;
-    background: rgba(168,85,247,0.15); color: var(--purple);
-    font-weight: 600; text-transform: uppercase; margin-left: 8px;
-  }
-  .token-header .price { font-size: 20px; font-weight: 700; text-align: right; }
-  .token-header .price-change { font-size: 13px; text-align: right; }
-
-  /* Score Ring */
-  .score-ring-wrap { display: flex; justify-content: center; gap: 32px; flex-wrap: wrap; margin: 24px 0; }
-  .score-item { text-align: center; }
-  .score-ring { width: 100px; height: 100px; position: relative; }
-  .score-ring svg { transform: rotate(-90deg); }
-  .score-ring circle { fill: none; stroke-width: 6; }
-  .score-ring .bg { stroke: var(--bg-elevated); }
-  .score-ring .fg { stroke-linecap: round; transition: stroke-dashoffset 1s ease; }
-  .score-val { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; }
-  .score-label { margin-top: 8px; font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
-
-  /* Breakdown */
-  .breakdown { display: flex; flex-direction: column; gap: 12px; }
-  .breakdown-row {
-    display: flex; align-items: center; gap: 12px;
-    padding: 12px 16px; background: var(--bg-input);
-    border-radius: 8px; border-left: 3px solid var(--text-muted);
-  }
-  .breakdown-row .label { flex: 1; font-size: 14px; color: var(--text-body); }
-  .breakdown-row .bar-wrap { width: 120px; height: 6px; background: var(--bg-elevated); border-radius: 3px; overflow: hidden; }
-  .breakdown-row .bar-fill { height: 100%; border-radius: 3px; transition: width 0.8s ease; }
-  .breakdown-row .val { font-size: 14px; font-weight: 600; min-width: 40px; text-align: right; }
-
-  /* Rec cards */
-  .rec-card { padding: 16px 20px; border-radius: 10px; border-left: 4px solid; margin-bottom: 12px; background: var(--bg-card); }
-  .rec-card h4 { font-size: 14px; margin-bottom: 6px; }
-  .rec-card p { font-size: 13px; color: var(--text-body); }
-
-  /* Tranche Table */
-  .tranche-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
-  .tranche-table th { text-align: left; padding: 10px 12px; color: var(--text-muted); font-weight: 600; border-bottom: 1px solid var(--border); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
-  .tranche-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text-body); }
-  .tranche-table tr:last-child td { border-bottom: none; }
-  .tranche-table .highlight { color: var(--cyan); font-weight: 600; }
-
-  /* Exit Plan */
-  .exit-steps { display: flex; flex-direction: column; gap: 0; margin-top: 12px; }
-  .exit-step { display: flex; align-items: stretch; gap: 16px; }
-  .exit-step-line { display: flex; flex-direction: column; align-items: center; width: 32px; flex-shrink: 0; }
-  .exit-dot { width: 14px; height: 14px; border-radius: 50%; border: 3px solid var(--cyan); background: var(--bg-page); flex-shrink: 0; z-index: 1; }
-  .exit-line-seg { width: 2px; flex: 1; background: var(--border); }
-  .exit-step:last-child .exit-line-seg { display: none; }
-  .exit-content { padding: 2px 0 20px; font-size: 14px; }
-  .exit-content strong { color: var(--text-primary); }
-  .exit-content span { color: var(--text-muted); font-size: 13px; }
-
-  /* Warn */
-  .warn-box { display: flex; gap: 12px; padding: 14px 18px; border-radius: 10px; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); margin-top: 12px; font-size: 13px; color: var(--text-body); line-height: 1.5; }
-  .warn-box.info { background: rgba(6,182,212,0.08); border-color: rgba(6,182,212,0.2); }
-  .warn-box .icon { font-size: 20px; flex-shrink: 0; }
-
-  /* Quick Stats */
-  .quick-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 20px; }
-  .stat-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; text-align: center; }
-  .stat-card .stat-val { font-size: 18px; font-weight: 700; margin-bottom: 2px; }
-  .stat-card .stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
-
-  /* Reset */
-  .reset-btn { display: block; margin: 24px auto 0; padding: 12px 40px; border: 1px solid var(--border); border-radius: 10px; background: transparent; color: var(--text-muted); font-size: 14px; cursor: pointer; transition: all 0.2s; }
-  .reset-btn:hover { border-color: var(--text-body); color: var(--text-primary); }
-
-  @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-  .animate-in { animation: fadeUp 0.5s ease forwards; }
-  .sep { height: 1px; background: var(--border); margin: 20px 0; }
+  .welcome h2 { font-size:20px; font-weight:600; color:var(--body); margin-bottom:6px; }
+  .welcome p { font-size:13px; }
 </style>
 </head>
 <body>
 
-<div class="container">
-  <div class="header">
-    <h1>Memecoin Analyzer</h1>
-    <p>Dán link DexScreener để tự động lấy dữ liệu — Đưa ra khuyến nghị MUA / GIỮ / BÁN</p>
+<!-- Hidden fields -->
+<div style="display:none">
+  <input id="tokenName"><input id="marketCap" type="number"><input id="liquidity" type="number">
+  <input id="volume24h" type="number"><input id="tokenAge" type="number"><input id="holders" type="number">
+  <input id="top10Pct" type="number"><input id="priceChange" type="number"><input id="txns">
+  <input id="priceUsd"><input id="aiScore" type="number"><input id="bundledBuys" type="number">
+  <input id="totalCapital" type="number" value="1000"><input id="invested" type="number" value="0">
+  <input id="tokenAmount" type="number" value="0"><input id="currentValue">
+  <div class="check-item checked" data-key="mintRevoked"></div>
+  <div class="check-item checked" data-key="freezeRevoked"></div>
+  <div class="check-item checked" data-key="lpBurned"></div>
+  <div class="check-item checked" data-key="noHoneypot"></div>
+  <div class="check-item checked" data-key="noHiddenMint"></div>
+  <div class="check-item checked" data-key="top10Under30"></div>
+  <div class="check-item checked" data-key="noSingleHolder10"></div>
+  <div class="check-item checked" data-key="contractVerified"></div>
+  <div class="check-item checked" data-key="hasTwitter"></div>
+  <div class="check-item checked" data-key="hasTelegram"></div>
+  <div class="check-item checked" data-key="hasWebsite"></div>
+  <div class="check-item is-red" data-key="whaleSelling"></div>
+  <div class="check-item is-red" data-key="devSelling"></div>
+  <div id="stageGroup"><button class="toggle-btn active" data-val="considering"></button></div>
+</div>
+
+<!-- Top bar -->
+<div class="topbar">
+  <input type="text" id="dexUrl" placeholder="Dán link DexScreener hoặc token address...">
+  <button class="btn" id="fetchBtn" onclick="fetchAndAnalyze()">⚡ Phân tích</button>
+  <span class="status" id="fetchStatus"></span>
+  <div class="refresh-info" id="refreshInfo" style="display:none">
+    <span class="dot" id="rDot"></span>
+    <span id="lastRefreshInfo">5s</span>
+    <button onclick="toggleAutoRefresh()" id="autoRefreshToggle">⏸</button>
   </div>
+</div>
 
-  <!-- INPUT FORM -->
-  <div id="inputForm">
-
-    <!-- DexScreener Import -->
-    <div class="dex-import">
-      <h3>🔗 Import từ DexScreener</h3>
-      <div class="sub">Dán link coin từ dexscreener.com — Tự động điền Market Cap, Liquidity, Volume, Tuổi token, Social...</div>
-      <div class="dex-row">
-        <input type="text" id="dexUrl" placeholder="https://dexscreener.com/solana/ABC123... hoặc token address">
-        <button type="button" class="fetch-btn" id="fetchBtn" onclick="fetchDex()">🔍 Lấy dữ liệu</button>
-      </div>
-      <div class="fetch-status" id="fetchStatus"></div>
-    </div>
-
-    <!-- Section 1: Token Info -->
-    <div class="section">
-      <div class="section-header" onclick="toggleSection(this)">
-        <div class="section-icon" style="background:rgba(6,182,212,0.15);color:var(--cyan)">📊</div>
-        <h2>Thông tin Token</h2>
-        <span class="chevron">▼</span>
-      </div>
-      <div class="section-body">
-        <div class="form-grid">
-          <div class="field">
-            <label>Tên Token / Ticker</label>
-            <input type="text" id="tokenName" placeholder="VD: PEPE, DOGE...">
-          </div>
-          <div class="field">
-            <label>Vốn hóa thị trường (USD)</label>
-            <input type="number" id="marketCap" placeholder="VD: 500000">
-          </div>
-          <div class="field">
-            <label>Thanh khoản (USD)</label>
-            <input type="number" id="liquidity" placeholder="VD: 50000">
-          </div>
-          <div class="field">
-            <label>Khối lượng giao dịch 24h (USD)</label>
-            <input type="number" id="volume24h" placeholder="VD: 120000">
-          </div>
-          <div class="field">
-            <label>Tuổi Token <span class="hint">(phút kể từ ra mắt)</span></label>
-            <input type="number" id="tokenAge" placeholder="VD: 30">
-          </div>
-          <div class="field">
-            <label>Số người nắm giữ</label>
-            <input type="number" id="holders" placeholder="VD: 200">
-          </div>
-          <div class="field">
-            <label>Top 10 ví lớn nắm giữ (%)</label>
-            <input type="number" id="top10Pct" placeholder="VD: 45" min="0" max="100">
-          </div>
-          <div class="field">
-            <label>Biến động giá 24h (%)</label>
-            <input type="number" id="priceChange" placeholder="VD: -20 hoặc 150">
-          </div>
-          <div class="field">
-            <label>Lượt mua / bán 24h</label>
-            <input type="text" id="txns" placeholder="Tự động điền" readonly>
-          </div>
-          <div class="field">
-            <label>Giá hiện tại (USD)</label>
-            <input type="text" id="priceUsd" placeholder="Tự động điền" readonly>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Section 2: Smart Contract Audit -->
-    <div class="section">
-      <div class="section-header" onclick="toggleSection(this)">
-        <div class="section-icon" style="background:rgba(34,197,94,0.15);color:var(--green)">🔒</div>
-        <h2>Bảo mật Hợp đồng thông minh</h2>
-        <span class="chevron">▼</span>
-      </div>
-      <div class="section-body">
-        <div class="checklist" id="securityChecks">
-          <div class="check-item checked" data-key="mintRevoked" onclick="toggleCheck(this)">
-            <span class="check-box">✓</span>
-            <span>Đã khóa quyền tạo thêm token (Mint Revoked)</span>
-          </div>
-          <div class="check-item checked" data-key="freezeRevoked" onclick="toggleCheck(this)">
-            <span class="check-box">✓</span>
-            <span>Đã khóa quyền đóng băng token (Freeze Revoked)</span>
-          </div>
-          <div class="check-item checked" data-key="lpBurned" onclick="toggleCheck(this)">
-            <span class="check-box">✓</span>
-            <span>Thanh khoản đã đốt hoặc khóa (LP Burned/Locked)</span>
-          </div>
-          <div class="check-item checked" data-key="noHoneypot" onclick="toggleCheck(this)">
-            <span class="check-box">✓</span>
-            <span>Không phải bẫy mật ong — có thể bán được (No Honeypot)</span>
-          </div>
-          <div class="check-item checked" data-key="noHiddenMint" onclick="toggleCheck(this)">
-            <span class="check-box">✓</span>
-            <span>Không có hàm ẩn tạo token / hợp đồng ủy quyền đáng ngờ</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Section 3: Social & Signals -->
-    <div class="section">
-      <div class="section-header" onclick="toggleSection(this)">
-        <div class="section-icon" style="background:rgba(168,85,247,0.15);color:var(--purple)">📡</div>
-        <h2>Mạng xã hội & Cá voi</h2>
-        <span class="chevron">▼</span>
-      </div>
-      <div class="section-body">
-        <div class="form-grid" style="margin-bottom:16px;">
-          <div class="field">
-            <label>Điểm tín hiệu AI <span class="hint">(0-100, nếu có)</span></label>
-            <input type="number" id="aiScore" placeholder="VD: 75" min="0" max="100">
-          </div>
-          <div class="field">
-            <label>Số lệnh mua gộp đáng ngờ</label>
-            <input type="number" id="bundledBuys" placeholder="VD: 0">
-          </div>
-        </div>
-        <div class="checklist">
-          <div class="check-item checked" data-key="hasTwitter" onclick="toggleCheck(this)">
-            <span class="check-box">✓</span>
-            <span>Có trang Twitter/X hoạt động</span>
-          </div>
-          <div class="check-item checked" data-key="hasTelegram" onclick="toggleCheck(this)">
-            <span class="check-box">✓</span>
-            <span>Có nhóm Telegram</span>
-          </div>
-          <div class="check-item checked" data-key="hasWebsite" onclick="toggleCheck(this)">
-            <span class="check-box">✓</span>
-            <span>Có trang web chính thức</span>
-          </div>
-          <div class="check-item is-red" data-key="whaleSelling" onclick="toggleCheck(this)">
-            <span class="check-box">✓</span>
-            <span>⚠ Phát hiện cá voi đang bán tháo</span>
-          </div>
-          <div class="check-item is-red" data-key="devSelling" onclick="toggleCheck(this)">
-            <span class="check-box">✓</span>
-            <span>⚠ Ví nhà phát triển đang bán</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Section 4: Your Position -->
-    <div class="section">
-      <div class="section-header" onclick="toggleSection(this)">
-        <div class="section-icon" style="background:rgba(234,179,8,0.15);color:var(--yellow)">💰</div>
-        <h2>Vị thế của bạn (nếu đã mua)</h2>
-        <span class="chevron">▼</span>
-      </div>
-      <div class="section-body">
-        <div class="form-grid" style="margin-bottom:16px;">
-          <div class="field">
-            <label>Tổng vốn giao dịch (USD)</label>
-            <input type="number" id="totalCapital" placeholder="VD: 1000">
-          </div>
-          <div class="field">
-            <label>Đã bỏ vào coin này (USD) <span class="hint">(0 nếu chưa mua)</span></label>
-            <input type="number" id="invested" placeholder="VD: 50">
-          </div>
-          <div class="field">
-            <label>Số lượng token đang giữ <span class="hint">(0 nếu chưa mua)</span></label>
-            <input type="number" id="tokenAmount" placeholder="VD: 1000000">
-          </div>
-          <div class="field">
-            <label>Giá trị hiện tại (USD) <span class="hint">tự tính từ giá DexScreener</span></label>
-            <input type="text" id="currentValue" placeholder="— tự động —" readonly>
-          </div>
-        </div>
-        <div class="field" style="margin-bottom: 8px;">
-          <label>Bạn đang ở giai đoạn nào?</label>
-        </div>
-        <div class="toggle-group" id="stageGroup">
-          <button type="button" class="toggle-btn active" data-val="considering" onclick="selectToggle(this)">Đang xem xét mua</button>
-          <button type="button" class="toggle-btn" data-val="holding" onclick="selectToggle(this)">Đang giữ</button>
-          <button type="button" class="toggle-btn" data-val="want-sell" onclick="selectToggle(this)">Muốn bán</button>
-          <button type="button" class="toggle-btn" data-val="want-add" onclick="selectToggle(this)">Muốn mua thêm</button>
-        </div>
-      </div>
-    </div>
-
-    <button type="button" class="analyze-btn" onclick="analyze()">⚡ PHÂN TÍCH NGAY</button>
+<!-- Welcome screen -->
+<div class="welcome" id="welcomeScreen">
+  <div>
+    <h2>Coin Analyzer</h2>
+    <p>Dán link DexScreener vào thanh trên rồi bấm Phân tích</p>
   </div>
+</div>
 
-  <!-- RESULTS -->
-  <div id="results">
-    <div id="tokenHeaderResult"></div>
+<!-- Dashboard -->
+<div id="dashboard">
+  <div class="dash-grid">
+    <!-- Info strip -->
+    <div class="info-strip" id="infoStrip"></div>
 
-    <div class="result-verdict animate-in" id="verdictCard" style="background:var(--bg-card);">
-      <div class="verdict-icon" id="verdictIcon"></div>
-      <div class="verdict-label">Khuyến nghị</div>
-      <div class="verdict-text" id="verdictText"></div>
-      <div class="verdict-sub" id="verdictSub"></div>
+    <!-- Left: Chart -->
+    <div class="chart-area" id="chartArea">
+      <iframe id="dexChart" allowfullscreen></iframe>
     </div>
 
-    <div id="quickStats" class="quick-stats"></div>
-
-    <div class="score-ring-wrap animate-in" style="animation-delay:0.1s">
-      <div class="score-item"><div class="score-ring"><svg width="100" height="100"><circle class="bg" cx="50" cy="50" r="42"/><circle class="fg" id="ringTotal" cx="50" cy="50" r="42" stroke-dasharray="264" stroke-dashoffset="264"/></svg><div class="score-val" id="valTotal">0</div></div><div class="score-label">Tổng điểm</div></div>
-      <div class="score-item"><div class="score-ring"><svg width="100" height="100"><circle class="bg" cx="50" cy="50" r="42"/><circle class="fg" id="ringSafety" cx="50" cy="50" r="42" stroke-dasharray="264" stroke-dashoffset="264"/></svg><div class="score-val" id="valSafety">0</div></div><div class="score-label">An toàn</div></div>
-      <div class="score-item"><div class="score-ring"><svg width="100" height="100"><circle class="bg" cx="50" cy="50" r="42"/><circle class="fg" id="ringSignal" cx="50" cy="50" r="42" stroke-dasharray="264" stroke-dashoffset="264"/></svg><div class="score-val" id="valSignal">0</div></div><div class="score-label">Tín hiệu</div></div>
-      <div class="score-item"><div class="score-ring"><svg width="100" height="100"><circle class="bg" cx="50" cy="50" r="42"/><circle class="fg" id="ringRisk" cx="50" cy="50" r="42" stroke-dasharray="264" stroke-dashoffset="264"/></svg><div class="score-val" id="valRisk">0</div></div><div class="score-label">Rủi ro</div></div>
-    </div>
-
-    <div class="section animate-in" style="animation-delay:0.2s">
-      <div class="section-header" onclick="toggleSection(this)">
-        <div class="section-icon" style="background:rgba(6,182,212,0.15);color:var(--cyan)">📋</div>
-        <h2>Chi tiết đánh giá</h2><span class="chevron">▼</span>
+    <!-- Right: Analysis panel -->
+    <div class="panel" id="panel">
+      <div class="verdict-card" id="verdictCard">
+        <div class="v-icon" id="vIcon"></div>
+        <div class="v-text" id="vText"></div>
+        <div class="v-sub" id="vSub"></div>
       </div>
-      <div class="section-body"><div class="breakdown" id="breakdownList"></div></div>
-    </div>
 
-    <div class="section animate-in" id="redFlagSection" style="animation-delay:0.25s; display:none;">
-      <div class="section-header" onclick="toggleSection(this)">
-        <div class="section-icon" style="background:rgba(239,68,68,0.15);color:var(--red)">🚩</div>
-        <h2>Cảnh báo nguy hiểm</h2><span class="chevron">▼</span>
+      <div class="zone-strip" id="zoneStrip"></div>
+
+      <div class="score-row">
+        <div class="score-item"><div class="score-ring"><svg width="56" height="56"><circle class="bg" cx="28" cy="28" r="23"/><circle class="fg" id="ringTotal" cx="28" cy="28" r="23" stroke-dasharray="144.5" stroke-dashoffset="144.5"/></svg><div class="score-val" id="valTotal">0</div></div><div class="score-label">Tổng</div></div>
+        <div class="score-item"><div class="score-ring"><svg width="56" height="56"><circle class="bg" cx="28" cy="28" r="23"/><circle class="fg" id="ringSafety" cx="28" cy="28" r="23" stroke-dasharray="144.5" stroke-dashoffset="144.5"/></svg><div class="score-val" id="valSafety">0</div></div><div class="score-label">An toàn</div></div>
+        <div class="score-item"><div class="score-ring"><svg width="56" height="56"><circle class="bg" cx="28" cy="28" r="23"/><circle class="fg" id="ringSignal" cx="28" cy="28" r="23" stroke-dasharray="144.5" stroke-dashoffset="144.5"/></svg><div class="score-val" id="valSignal">0</div></div><div class="score-label">Tín hiệu</div></div>
+        <div class="score-item"><div class="score-ring"><svg width="56" height="56"><circle class="bg" cx="28" cy="28" r="23"/><circle class="fg" id="ringRisk" cx="28" cy="28" r="23" stroke-dasharray="144.5" stroke-dashoffset="144.5"/></svg><div class="score-val" id="valRisk">0</div></div><div class="score-label">Rủi ro</div></div>
       </div>
-      <div class="section-body" id="redFlagList"></div>
-    </div>
 
-    <div class="section animate-in" style="animation-delay:0.3s">
-      <div class="section-header" onclick="toggleSection(this)">
-        <div class="section-icon" style="background:rgba(34,197,94,0.15);color:var(--green)">💡</div>
-        <h2>Khuyến nghị hành động</h2><span class="chevron">▼</span>
-      </div>
-      <div class="section-body" id="recommendations"></div>
-    </div>
+      <div class="bd-list" id="breakdownList"></div>
 
-    <div class="section animate-in" style="animation-delay:0.35s" id="moneySection">
-      <div class="section-header" onclick="toggleSection(this)">
-        <div class="section-icon" style="background:rgba(234,179,8,0.15);color:var(--yellow)">🏦</div>
-        <h2>Kế hoạch vốn & Chia lệnh</h2><span class="chevron">▼</span>
-      </div>
-      <div class="section-body" id="moneyPlan"></div>
-    </div>
+      <div class="notable-bar" id="notableBar"></div>
 
-    <div class="section animate-in" style="animation-delay:0.4s" id="exitSection">
-      <div class="section-header" onclick="toggleSection(this)">
-        <div class="section-icon" style="background:rgba(168,85,247,0.15);color:var(--purple)">🎯</div>
-        <h2>Chiến lược chốt lời / cắt lỗ</h2><span class="chevron">▼</span>
-      </div>
-      <div class="section-body" id="exitPlan"></div>
+      <div class="rf-list" id="redFlagList"></div>
     </div>
-
-    <button type="button" class="reset-btn" onclick="resetForm()">↻ Phân tích coin khác</button>
   </div>
 </div>
 
 <script>
-/* ===== Globals ===== */
-var fetchedData = null; // store raw API data for results display
+var fetchedData = null;
+var multiTF = { priceM5:null, priceH1:null, priceH6:null, priceH24:null, volM5:null, volH1:null, volH6:null };
+var autoRefreshTimer = null, autoRefreshEnabled = true, AUTO_REFRESH_INTERVAL = 3000;
+var isFirstRender = true;
 
-/* ===== Section Toggle ===== */
-function toggleSection(header) {
-  var body = header.nextElementSibling;
-  if (header.classList.contains('collapsed')) {
-    header.classList.remove('collapsed');
-    body.classList.remove('hidden');
-  } else {
-    header.classList.add('collapsed');
-    body.classList.add('hidden');
-  }
+function getVal(id) { var el = document.getElementById(id); return el ? (parseFloat(el.value)||0) : 0; }
+function isChecked(key) { var el = document.querySelector('.check-item[data-key="'+key+'"]'); return el ? el.classList.contains('checked') : false; }
+function getStage() { return 'considering'; }
+function setField(id, val) { var el = document.getElementById(id); if(el && val !== undefined && val !== null) el.value = val; }
+function setStatus(msg, type) { var el = document.getElementById('fetchStatus'); el.className='status '+type; el.innerHTML=msg; }
+function autoCheck(key) { var el = document.querySelector('.check-item[data-key="'+key+'"]'); if(el && !el.classList.contains('checked')) el.classList.add('checked'); }
+function autoUncheck(key) { var el = document.querySelector('.check-item[data-key="'+key+'"]'); if(el && el.classList.contains('checked')) el.classList.remove('checked'); }
+function fmtNum(n) { if(n>=1e9) return '$'+(n/1e9).toFixed(1)+'B'; if(n>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if(n>=1e3) return '$'+(n/1e3).toFixed(1)+'K'; return '$'+n.toFixed(0); }
+function scoreColor(s) { return s>=75?'var(--green)':s>=50?'var(--yellow)':s>=30?'var(--orange)':'var(--red)'; }
+
+var CIRC = 144.5;
+function setRing(id, valId, score) {
+  var off = CIRC - (CIRC * Math.min(score,100)/100);
+  var el = document.getElementById(id), v = document.getElementById(valId);
+  if(!el||!v) return;
+  el.style.stroke = scoreColor(score); el.style.strokeDashoffset = off;
+  v.textContent = Math.round(score); v.style.color = scoreColor(score);
 }
 
-function toggleCheck(item) { item.classList.toggle('checked'); }
-
-function selectToggle(btn) {
-  var btns = btn.parentElement.querySelectorAll('.toggle-btn');
-  for (var i = 0; i < btns.length; i++) btns[i].classList.remove('active');
-  btn.classList.add('active');
-}
-
-function getVal(id) { var el = document.getElementById(id); return el ? (parseFloat(el.value) || 0) : 0; }
-function isChecked(key) { var el = document.querySelector('.check-item[data-key="' + key + '"]'); return el ? el.classList.contains('checked') : false; }
-function getStage() { var a = document.querySelector('#stageGroup .toggle-btn.active'); return a ? a.getAttribute('data-val') : 'considering'; }
-
-function setField(id, val) {
-  var el = document.getElementById(id);
-  if (!el || val === undefined || val === null) return;
-  el.value = val;
-  el.classList.add('auto-filled');
-}
-
-function setStatus(msg, type) {
-  var el = document.getElementById('fetchStatus');
-  el.className = 'fetch-status ' + type;
-  el.innerHTML = msg;
-}
-
-function autoCheck(key) {
-  var el = document.querySelector('.check-item[data-key="' + key + '"]');
-  if (el && !el.classList.contains('checked')) el.classList.add('checked');
-}
-
-function fmtNum(n) {
-  if (n >= 1e9) return '$' + (n/1e9).toFixed(2) + 'B';
-  if (n >= 1e6) return '$' + (n/1e6).toFixed(2) + 'M';
-  if (n >= 1e3) return '$' + (n/1e3).toFixed(1) + 'K';
-  return '$' + n.toFixed(2);
-}
-
-/* ===== DEXSCREENER FETCH ===== */
+/* ===== DEXSCREENER ===== */
 function parseDexUrl(input) {
   input = input.trim();
-  // URL format: https://dexscreener.com/{chain}/{pairAddress}
-  var urlMatch = input.match(/dexscreener\.com\/([^\/]+)\/([^\/?#]+)/);
-  if (urlMatch) {
-    return { type: 'pair', chain: urlMatch[1], address: urlMatch[2] };
-  }
-  // Raw address (assume search by token)
-  if (/^[a-zA-Z0-9]{20,}$/.test(input)) {
-    return { type: 'token', address: input };
+  var m = input.match(/dexscreener\.com\/([^\/]+)\/([^\/?#]+)/);
+  if (m) return { type:'pair', chain:m[1], address:m[2] };
+  if (/^[a-zA-Z0-9]{20,}$/.test(input)) return { type:'token', address:input };
+  return null;
+}
+function extractPair(data) {
+  if (data.pair) return data.pair;
+  if (data.pairs && data.pairs.length > 0) {
+    return data.pairs.sort(function(a,b){
+      return ((b.liquidity&&b.liquidity.usd)||0) - ((a.liquidity&&a.liquidity.usd)||0);
+    })[0];
   }
   return null;
 }
 
-function fetchDex() {
-  var input = document.getElementById('dexUrl').value;
-  if (!input.trim()) { setStatus('⚠ Vui lòng dán link DexScreener hoặc token address', 'error'); return; }
-
-  var parsed = parseDexUrl(input);
-  if (!parsed) { setStatus('⚠ Link không hợp lệ. VD: https://dexscreener.com/solana/ADDRESS', 'error'); return; }
-
-  var btn = document.getElementById('fetchBtn');
-  btn.disabled = true;
-  setStatus('<span class="spin">⟳</span> Đang lấy dữ liệu từ DexScreener...', 'loading');
-
-  var url;
-  if (parsed.type === 'pair') {
-    url = 'https://api.dexscreener.com/latest/dex/pairs/' + parsed.chain + '/' + parsed.address;
-  } else {
-    url = 'https://api.dexscreener.com/latest/dex/tokens/' + parsed.address;
-  }
-
-  fetch(url)
-    .then(function(res) {
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      return res.json();
-    })
-    .then(function(data) {
-      var pair = null;
-      if (data.pair) {
-        pair = data.pair;
-      } else if (data.pairs && data.pairs.length > 0) {
-        // Pick pair with highest liquidity
-        pair = data.pairs.sort(function(a, b) {
-          return ((b.liquidity && b.liquidity.usd) || 0) - ((a.liquidity && a.liquidity.usd) || 0);
-        })[0];
-      }
-
-      if (!pair) {
-        setStatus('⚠ Không tìm thấy dữ liệu cho token/pair này', 'error');
-        btn.disabled = false;
-        return;
-      }
-
-      fetchedData = pair;
-      fillFromPair(pair);
-      btn.disabled = false;
-    })
-    .catch(function(err) {
-      setStatus('❌ Lỗi kết nối: ' + err.message, 'error');
-      btn.disabled = false;
-    });
-}
-
 function fillFromPair(p) {
-  // Token name
-  var name = (p.baseToken && p.baseToken.symbol) || '';
-  var fullName = (p.baseToken && p.baseToken.name) || '';
-  setField('tokenName', name + (fullName ? ' (' + fullName + ')' : ''));
-
-  // Market cap (fdv)
+  var name = (p.baseToken&&p.baseToken.symbol)||'';
+  var fullName = (p.baseToken&&p.baseToken.name)||'';
+  setField('tokenName', name + (fullName ? ' ('+fullName+')' : ''));
   if (p.fdv) setField('marketCap', Math.round(p.fdv));
   else if (p.marketCap) setField('marketCap', Math.round(p.marketCap));
-
-  // Liquidity
-  if (p.liquidity && p.liquidity.usd) setField('liquidity', Math.round(p.liquidity.usd));
-
-  // Volume 24h
+  if (p.liquidity && typeof p.liquidity.usd==='number') setField('liquidity', Math.round(p.liquidity.usd));
   if (p.volume && p.volume.h24) setField('volume24h', Math.round(p.volume.h24));
-
-  // Price change 24h
-  if (p.priceChange && p.priceChange.h24 !== undefined) setField('priceChange', p.priceChange.h24);
-
-  // Token age (minutes from pairCreatedAt)
-  if (p.pairCreatedAt) {
-    var ageMs = Date.now() - p.pairCreatedAt;
-    var ageMins = Math.round(ageMs / 60000);
-    setField('tokenAge', ageMins);
+  if (p.priceChange && p.priceChange.h24!==undefined) setField('priceChange', p.priceChange.h24);
+  if (p.priceChange) {
+    multiTF.priceM5=p.priceChange.m5!==undefined?p.priceChange.m5:null;
+    multiTF.priceH1=p.priceChange.h1!==undefined?p.priceChange.h1:null;
+    multiTF.priceH6=p.priceChange.h6!==undefined?p.priceChange.h6:null;
+    multiTF.priceH24=p.priceChange.h24!==undefined?p.priceChange.h24:null;
   }
-
-  // Price
+  if (p.volume) { multiTF.volM5=p.volume.m5!==undefined?p.volume.m5:null; multiTF.volH1=p.volume.h1!==undefined?p.volume.h1:null; multiTF.volH6=p.volume.h6!==undefined?p.volume.h6:null; }
+  if (p.pairCreatedAt) setField('tokenAge', Math.round((Date.now()-p.pairCreatedAt)/60000));
   if (p.priceUsd) setField('priceUsd', p.priceUsd);
-
-  // Txns
-  if (p.txns && p.txns.h24) {
-    var buys = p.txns.h24.buys || 0;
-    var sells = p.txns.h24.sells || 0;
-    setField('txns', buys + ' mua / ' + sells + ' bán');
-
-    // Detect whale selling: if sells >> buys significantly
-    if (sells > 0 && buys > 0 && (sells / buys) > 3) {
-      autoCheck('whaleSelling');
-    }
-  }
-
-  // Social links from info
-  if (p.info && p.info.socials) {
-    for (var i = 0; i < p.info.socials.length; i++) {
-      var s = p.info.socials[i];
-      if (s.type === 'twitter') autoCheck('hasTwitter');
-      if (s.type === 'telegram') autoCheck('hasTelegram');
-    }
-  }
-  if (p.info && p.info.websites && p.info.websites.length > 0) {
-    autoCheck('hasWebsite');
-  }
-
-  // Count fields filled
-  var filled = 0;
-  var fields = ['tokenName','marketCap','liquidity','volume24h','priceChange','tokenAge','priceUsd','txns'];
-  for (var i = 0; i < fields.length; i++) {
-    if (document.getElementById(fields[i]).value) filled++;
-  }
-
-  var chainName = p.chainId || 'unknown';
-  var pairLabel = (p.dexId || '') + ' on ' + chainName;
-  setStatus('✅ Đã import <strong>' + name + '</strong> (' + pairLabel + ') — ' + filled + ' trường tự động điền. Kiểm tra Bảo mật & Holder thủ công.', 'success');
+  if (p.txns && p.txns.h24) setField('txns', (p.txns.h24.buys||0)+' mua / '+(p.txns.h24.sells||0)+' bán');
+  var rS=0,rB=0;
+  if(p.txns&&p.txns.h1){rB=p.txns.h1.buys||0;rS=p.txns.h1.sells||0;}
+  if(rS>0&&rB>0&&(rS/rB)>3) autoCheck('whaleSelling');
+  autoUncheck('hasTwitter'); autoUncheck('hasTelegram'); autoUncheck('hasWebsite');
+  if(p.info&&p.info.socials) for(var i=0;i<p.info.socials.length;i++){var s=p.info.socials[i]; if(s.type==='twitter')autoCheck('hasTwitter'); if(s.type==='telegram')autoCheck('hasTelegram');}
+  if(p.info&&p.info.websites&&p.info.websites.length>0) autoCheck('hasWebsite');
+  autoUncheck('whaleSelling'); autoUncheck('devSelling');
+  var isPF=(p.dexId==='pumpfun'||p.dexId==='pumpswap');
+  if(isPF){autoUncheck('contractVerified');autoUncheck('top10Under30');autoUncheck('noSingleHolder10');}
 }
 
-/* ===== Score Color ===== */
-function scoreColor(score) {
-  if (score >= 75) return 'var(--green)';
-  if (score >= 50) return 'var(--yellow)';
-  if (score >= 30) return 'var(--orange)';
-  return 'var(--red)';
-}
-
-function setRing(id, valId, score) {
-  var circ = 264, offset = circ - (circ * Math.min(score, 100) / 100);
-  var el = document.getElementById(id), valEl = document.getElementById(valId);
-  if (!el || !valEl) return;
-  el.style.stroke = scoreColor(score);
-  el.style.strokeDashoffset = offset;
-  valEl.textContent = Math.round(score);
-  valEl.style.color = scoreColor(score);
-}
-
-/* ===== ANALYZE ===== */
+/* ===== ANALYZE (logic giữ nguyên, render mới) ===== */
 function analyze() {
   var d = {
-    name: document.getElementById('tokenName').value || 'TOKEN',
-    mcap: getVal('marketCap'), liq: getVal('liquidity'), vol: getVal('volume24h'),
-    age: getVal('tokenAge'), holders: getVal('holders'), top10: getVal('top10Pct'),
-    priceChg: getVal('priceChange'), aiScore: getVal('aiScore'), bundled: getVal('bundledBuys'),
-    capital: getVal('totalCapital'), invested: getVal('invested'),
-    tokenAmount: getVal('tokenAmount'),
-    priceUsd: parseFloat(document.getElementById('priceUsd').value) || 0,
-    stage: getStage(),
-    mintRevoked: isChecked('mintRevoked'), freezeRevoked: isChecked('freezeRevoked'),
-    lpBurned: isChecked('lpBurned'), noHoneypot: isChecked('noHoneypot'), noHiddenMint: isChecked('noHiddenMint'),
-    hasTwitter: isChecked('hasTwitter'), hasTelegram: isChecked('hasTelegram'), hasWebsite: isChecked('hasWebsite'),
-    whaleSelling: isChecked('whaleSelling'), devSelling: isChecked('devSelling')
+    name: document.getElementById('tokenName').value||'TOKEN',
+    mcap:getVal('marketCap'), liq:getVal('liquidity'), vol:getVal('volume24h'),
+    age:getVal('tokenAge'), holders:getVal('holders'), top10:getVal('top10Pct'),
+    priceChg:getVal('priceChange'), aiScore:getVal('aiScore'), bundled:getVal('bundledBuys'),
+    capital:getVal('totalCapital'), invested:getVal('invested'), tokenAmount:getVal('tokenAmount'),
+    priceUsd:parseFloat(document.getElementById('priceUsd').value)||0, stage:getStage(),
+    mintRevoked:isChecked('mintRevoked'), freezeRevoked:isChecked('freezeRevoked'),
+    lpBurned:isChecked('lpBurned'), noHoneypot:isChecked('noHoneypot'), noHiddenMint:isChecked('noHiddenMint'),
+    top10Under30:isChecked('top10Under30'), noSingleHolder10:isChecked('noSingleHolder10'), contractVerified:isChecked('contractVerified'),
+    hasTwitter:isChecked('hasTwitter'), hasTelegram:isChecked('hasTelegram'), hasWebsite:isChecked('hasWebsite'),
+    whaleSelling:isChecked('whaleSelling'), devSelling:isChecked('devSelling')
   };
 
-  // Auto-calc giá trị hiện tại = số token * giá
-  if (d.tokenAmount > 0 && d.priceUsd > 0) {
-    d.curVal = d.tokenAmount * d.priceUsd;
-  } else {
-    d.curVal = getVal('currentValue');
-  }
-  // Hiển thị vào ô readonly
-  if (d.curVal > 0) document.getElementById('currentValue').value = '$' + d.curVal.toFixed(2);
+  var volH1=multiTF.volH1, volH6=multiTF.volH6, volM5=multiTF.volM5;
+  if(volH1!==null&&d.vol>0){var h1E=volH1*24; if(h1E/d.vol<0.2) d.vol=Math.round(h1E);}
+  else if(volH6!==null&&d.vol>0){var h6E=volH6*4; if(h6E<d.vol*0.2) d.vol=Math.round(h6E);}
 
-  var redFlags = [], breakdown = [];
+  var recentVolDead=(volH1!==null&&volH1<500)||(volM5!==null&&volM5<10);
+  var liqThin=d.liq>0&&d.liq<15000;
+  var isLikelyDead=(d.priceChg<-80)||(d.mcap>0&&d.mcap<5000&&d.liq<3000)||(recentVolDead&&liqThin&&d.priceChg<-10);
+  var isDyingMomentum=recentVolDead&&!isLikelyDead;
+
+  if(d.tokenAmount>0&&d.priceUsd>0) d.curVal=d.tokenAmount*d.priceUsd; else d.curVal=0;
+
+  var redFlags=[], breakdown=[];
 
   // 1. Security
-  var secChecks = [d.mintRevoked, d.freezeRevoked, d.lpBurned, d.noHoneypot, d.noHiddenMint];
-  var secCount = 0;
-  for (var i = 0; i < secChecks.length; i++) { if (secChecks[i]) secCount++; }
-  var secScore = secCount * 20;
-  if (!d.mintRevoked) redFlags.push('Chưa khóa quyền tạo token — Nhà phát triển có thể in thêm và bán phá giá');
-  if (!d.lpBurned) redFlags.push('Thanh khoản chưa đốt/khóa — Có nguy cơ rút thanh khoản (rug pull)');
-  if (!d.noHoneypot) redFlags.push('Chưa xác nhận bẫy mật ong — Có thể mua được nhưng không bán được');
-  breakdown.push({ label: 'Bảo mật hợp đồng', score: secScore, color: scoreColor(secScore) });
+  var criticalChecks=[d.mintRevoked,d.freezeRevoked,d.lpBurned];
+  var standardChecks=[d.noHoneypot,d.noHiddenMint,d.top10Under30,d.noSingleHolder10,d.contractVerified];
+  var critCount=0,stdCount=0;
+  for(var i=0;i<criticalChecks.length;i++) if(criticalChecks[i]) critCount++;
+  for(var i=0;i<standardChecks.length;i++) if(standardChecks[i]) stdCount++;
+  var secScore=Math.round((critCount/3)*60+(stdCount/5)*40);
+  if(!d.mintRevoked) redFlags.push('Chưa khóa Mint — Dev có thể in thêm token');
+  if(!d.freezeRevoked) redFlags.push('Chưa khóa Freeze — Dev có thể đóng băng ví');
+  if(!d.lpBurned) redFlags.push('LP chưa đốt/khóa — Nguy cơ rug pull');
+  if(!d.top10Under30) redFlags.push('Top 10 ví ≥ 30%');
+  breakdown.push({label:'Bảo mật',score:secScore,color:scoreColor(secScore)});
 
   // 2. Liquidity
-  var liqScore = 0;
-  if (d.mcap > 0 && d.liq > 0) {
-    var liqRatio = d.liq / d.mcap;
-    if (liqRatio >= 0.1) liqScore = 100;
-    else if (liqRatio >= 0.05) liqScore = 75;
-    else if (liqRatio >= 0.02) liqScore = 50;
-    else if (liqRatio >= 0.01) liqScore = 25;
-    else { liqScore = 10; redFlags.push('Tỷ lệ LP/MCap cực thấp (' + (liqRatio*100).toFixed(2) + '%)'); }
-  }
-  if (d.liq > 0 && d.liq < 5000) { liqScore = Math.min(liqScore, 20); redFlags.push('Thanh khoản dưới $5,000 — Rất dễ bị thao túng'); }
-  breakdown.push({ label: 'Thanh khoản', score: liqScore, color: scoreColor(liqScore) });
+  var liqScore=0;
+  if(d.mcap>0&&d.liq>0){var lr=d.liq/d.mcap; liqScore=lr>=0.1?100:lr>=0.05?75:lr>=0.02?50:lr>=0.01?25:10;}
+  if(d.liq>0&&d.liq<5000){liqScore=Math.min(liqScore,20); redFlags.push('Thanh khoản < $5K');}
+  breakdown.push({label:'Thanh khoản',score:liqScore,color:scoreColor(liqScore)});
 
   // 3. Volume
-  var volScore = 0;
-  if (d.mcap > 0 && d.vol > 0) {
-    var volRatio = d.vol / d.mcap;
-    if (volRatio >= 1) volScore = 100;
-    else if (volRatio >= 0.5) volScore = 80;
-    else if (volRatio >= 0.2) volScore = 60;
-    else if (volRatio >= 0.05) volScore = 40;
-    else volScore = 20;
+  var volScore=0;
+  if(d.mcap>0&&d.vol>0){var vr=d.vol/d.mcap; volScore=vr>=1?100:vr>=0.5?80:vr>=0.2?60:vr>=0.05?40:20;}
+  breakdown.push({label:'Volume',score:volScore,color:scoreColor(volScore)});
+
+  // 4. Holders
+  var holderScore=50;
+  if(d.holders>0||d.top10>0){holderScore=0; holderScore+=d.holders>=500?40:d.holders>=200?30:d.holders>=50?20:d.holders>0?5:20; if(d.top10===0)holderScore+=30; else if(d.top10<=20)holderScore+=60; else if(d.top10<=35)holderScore+=45; else if(d.top10<=50)holderScore+=25; else holderScore+=5; holderScore=Math.min(holderScore,100);}
+  breakdown.push({label:'Holders',score:holderScore,color:scoreColor(holderScore)});
+
+  // 5. Price
+  var priceScore=50;
+  if(d.priceChg!==0){var hv=d.vol>0&&d.mcap>0&&(d.vol/d.mcap)>=0.5;
+    if(d.priceChg<=-80)priceScore=5; else if(d.priceChg<=-50)priceScore=hv&&!isLikelyDead?40:15;
+    else if(d.priceChg<=-15)priceScore=hv?75:55; else if(d.priceChg<=0)priceScore=65;
+    else if(d.priceChg<=30)priceScore=75; else if(d.priceChg<=100)priceScore=55;
+    else if(d.priceChg<=300){priceScore=35;redFlags.push('Giá +'+d.priceChg.toFixed(0)+'%');}
+    else{priceScore=15;redFlags.push('Giá bơm +'+d.priceChg.toFixed(0)+'%');}
   }
-  breakdown.push({ label: 'Khối lượng giao dịch', score: volScore, color: scoreColor(volScore) });
+  breakdown.push({label:'Giá',score:priceScore,color:scoreColor(priceScore)});
 
-  // 4. Holders (nếu không nhập → mặc định 50 = trung bình, không phạt)
-  var holderScore = 0;
-  if (d.holders === 0 && d.top10 === 0) {
-    holderScore = 50; // chưa có dữ liệu → trung bình
-  } else {
-    if (d.holders >= 500) holderScore += 40;
-    else if (d.holders >= 200) holderScore += 30;
-    else if (d.holders >= 50) holderScore += 20;
-    else if (d.holders > 0) holderScore += 5;
-    else holderScore += 20; // không nhập → không phạt
+  // 6. Age
+  var ageScore=50,ageHV=d.vol>0&&d.mcap>0&&(d.vol/d.mcap)>=0.2;
+  if(d.age>0){if(d.age<5)ageScore=30;else if(d.age<=30)ageScore=90;else if(d.age<=120)ageScore=75;else if(d.age<=480)ageScore=60;else if(d.age<=1440)ageScore=ageHV?55:35;else ageScore=ageHV?35:20;}
+  breakdown.push({label:'Timing',score:ageScore,color:scoreColor(ageScore)});
 
-    if (d.top10 === 0) holderScore += 30; // không nhập → không phạt
-    else if (d.top10 <= 20) holderScore += 60;
-    else if (d.top10 <= 35) holderScore += 45;
-    else if (d.top10 <= 50) holderScore += 25;
-    else { holderScore += 5; redFlags.push('Top 10 ví lớn nắm ' + d.top10 + '% — Tập trung quá nhiều vào ít người'); }
+  // 7. Social
+  var socialScore=0;
+  if(d.hasTwitter)socialScore+=40; if(d.hasTelegram)socialScore+=30; if(d.hasWebsite)socialScore+=30;
+  if(socialScore===0) redFlags.push('Không có mạng xã hội');
+  breakdown.push({label:'Social',score:socialScore,color:scoreColor(socialScore)});
+
+  // 8. AI Signal
+  var sigScore=0;
+  if(d.aiScore>0){sigScore=d.aiScore;}else{
+    var ac=0; if(d.mcap>0&&d.vol>0){var vm=d.vol/d.mcap; ac+=vm>=3?30:vm>=1.5?25:vm>=0.5?18:vm>=0.2?12:5;}
+    if(d.mcap>0&&d.liq>0){var lm=d.liq/d.mcap; ac+=lm>=0.2?15:lm>=0.1?12:lm>=0.05?8:3;}
+    var te=document.getElementById('txns').value,tb=0,ts=0;
+    if(te){var tm=te.match(/(\d+)\s*mua\s*\/\s*(\d+)\s*bán/);if(tm){tb=parseInt(tm[1]);ts=parseInt(tm[2]);}}
+    if(tb>0&&ts>0){var br=tb/(tb+ts)*100;ac+=br>=60?15:br>=50?10:br>=40?5:0;}else ac+=7;
+    if(d.age>0){ac+=d.age<=30?15:d.age<=120?12:d.age<=480?8:d.age<=1440?5:2;}else ac+=7;
+    ac+=d.mcap>=50000&&d.mcap<=2000000?10:d.mcap>=10000?6:d.mcap>0?3:0;
+    if(critCount===3)ac+=10;else if(critCount===2)ac+=5;
+    if(socialScore>=70)ac+=5;else if(socialScore>=40)ac+=3;
+    sigScore=Math.min(ac,100);
   }
-  holderScore = Math.min(holderScore, 100);
-  breakdown.push({ label: 'Phân bổ người giữ', score: holderScore, color: scoreColor(holderScore) });
+  breakdown.push({label:'AI Signal',score:sigScore,color:scoreColor(sigScore)});
 
-  // 4b. Price Action — đánh giá biến động giá
-  var priceScore = 50;
-  var priceAdvice = '';
-  if (d.priceChg !== 0) {
-    if (d.priceChg <= -50) { priceScore = 30; priceAdvice = 'Giá giảm mạnh (-' + Math.abs(d.priceChg) + '%). Có thể là cơ hội mua đáy hoặc đang sụp — kiểm tra kỹ.'; }
-    else if (d.priceChg <= -20) { priceScore = 55; priceAdvice = 'Giá đang điều chỉnh. Có thể là điểm vào tốt nếu tín hiệu khác ổn.'; }
-    else if (d.priceChg <= 20) { priceScore = 70; priceAdvice = 'Giá ổn định. Vùng an toàn để vào lệnh.'; }
-    else if (d.priceChg <= 100) { priceScore = 60; priceAdvice = 'Giá đang tăng (+' + d.priceChg + '%). Cẩn thận mua đỉnh, chờ kéo ngược.'; }
-    else if (d.priceChg <= 500) { priceScore = 35; priceAdvice = 'Giá đã bơm mạnh (+' + d.priceChg + '%). Rủi ro cao nếu mua bây giờ.'; redFlags.push('Giá đã tăng ' + d.priceChg + '% — Cẩn thận mua đỉnh'); }
-    else { priceScore = 15; priceAdvice = 'Giá bơm cực mạnh (+' + d.priceChg + '%). Gần như chắc chắn sẽ giảm.'; redFlags.push('Giá bơm +' + d.priceChg + '% — Cực kỳ nguy hiểm nếu mua lúc này'); }
-  }
-  breakdown.push({ label: 'Biến động giá', score: priceScore, color: scoreColor(priceScore) });
+  // 9. Whale
+  var whaleScore=100;
+  if(d.whaleSelling){whaleScore-=40;redFlags.push('Cá voi đang bán');}
+  if(d.devSelling){whaleScore-=50;redFlags.push('Dev đang bán');}
+  if(d.bundled>3)whaleScore-=20;
+  whaleScore=Math.max(whaleScore,0);
+  breakdown.push({label:'Whale/Dev',score:whaleScore,color:scoreColor(whaleScore)});
 
-  // 5. Age
-  var ageScore = 50;
-  if (d.age > 0) {
-    if (d.age < 5) ageScore = 30;
-    else if (d.age <= 30) ageScore = 85;
-    else if (d.age <= 120) ageScore = 70;
-    else if (d.age <= 480) ageScore = 50;
-    else ageScore = 30;
-  }
-  breakdown.push({ label: 'Thời điểm vào lệnh', score: ageScore, color: scoreColor(ageScore) });
+  // Aggregate
+  var all=[secScore,liqScore,volScore,holderScore,priceScore,ageScore,socialScore,sigScore,whaleScore];
+  var w=[0.15,0.10,0.12,0.06,0.10,0.07,0.05,0.15,0.12];
+  var totalScore=0; for(var i=0;i<all.length;i++) totalScore+=all[i]*w[i];
+  totalScore=totalScore/0.92;
+  if(!isLikelyDead&&d.vol>0&&d.mcap>0&&(d.vol/d.mcap)>=2) totalScore=Math.min(totalScore+5,100);
+  if(isLikelyDead) totalScore=Math.min(totalScore,30);
+  var safetyScore=secScore*0.5+whaleScore*0.3+liqScore*0.2;
+  var signalScore=sigScore*0.3+volScore*0.25+priceScore*0.2+ageScore*0.15+socialScore*0.1;
+  var riskScore=100-totalScore;
 
-  // 6. Social
-  var socialScore = 0;
-  if (d.hasTwitter) socialScore += 35;
-  if (d.hasTelegram) socialScore += 30;
-  if (d.hasWebsite) socialScore += 35;
-  if (socialScore === 0) redFlags.push('Không có mạng xã hội nào — Dự án thiếu minh bạch');
-  breakdown.push({ label: 'Mạng xã hội', score: socialScore, color: scoreColor(socialScore) });
+  // Notable (10 criteria)
+  var nc=[], np=0;
+  var vmr=(d.mcap>0&&d.vol>0)?d.vol/d.mcap:0;
+  var txE=document.getElementById('txns').value,nB=0,nS=0,nBP=0;
+  if(txE){var nm=txE.match(/(\d+)\s*mua\s*\/\s*(\d+)\s*bán/);if(nm){nB=parseInt(nm[1]);nS=parseInt(nm[2]);nBP=nB/(nB+nS)*100;}}
+  var lmr=(d.mcap>0&&d.liq>0)?d.liq/d.mcap:0;
+  var scCnt=(d.hasTwitter?1:0)+(d.hasTelegram?1:0)+(d.hasWebsite?1:0);
 
-  // 7. AI Signal
-  var sigScore = d.aiScore || 50;
-  if (d.aiScore > 0 && d.aiScore < 50) redFlags.push('Điểm AI chỉ ' + d.aiScore + '/100 — Tín hiệu yếu');
-  breakdown.push({ label: 'Điểm tín hiệu AI', score: sigScore, color: scoreColor(sigScore) });
+  var checks=[
+    {l:'Vol/MCap',v:vmr.toFixed(2)+'x',p:vmr>=0.3},
+    {l:'Liq',v:fmtNum(d.liq),p:d.liq>=15000},
+    {l:'Buy%',v:nBP>0?nBP.toFixed(0)+'%':'?',p:nBP>=52||nBP===0},
+    {l:'MCap',v:fmtNum(d.mcap),p:d.mcap>=20000&&d.mcap<=5000000},
+    {l:'AI',v:sigScore+'',p:sigScore>=65},
+    {l:'Security',v:critCount+'/3',p:critCount===3},
+    {l:'Social',v:scCnt+'ch',p:scCnt>=1},
+    {l:'Liq/MCap',v:(lmr*100).toFixed(0)+'%',p:lmr>=0.15},
+    {l:'Price',v:(d.priceChg>=0?'+':'')+d.priceChg.toFixed(0)+'%',p:d.priceChg>-20},
+    {l:'Clean',v:(!d.whaleSelling&&!d.devSelling)?'OK':'!',p:!d.whaleSelling&&!d.devSelling&&d.bundled<=3}
+  ];
+  for(var i=0;i<checks.length;i++) if(checks[i].p) np++;
+  var isNotable=np>=7;
+  var nGrade=np>=9?'S':np>=7?'A':np>=5?'B':'C';
 
-  // 8. Whale/Dev
-  var whaleScore = 100;
-  if (d.whaleSelling) { whaleScore -= 40; redFlags.push('Cá voi đang bán tháo'); }
-  if (d.devSelling) { whaleScore -= 50; redFlags.push('Ví nhà phát triển đang bán — Dấu hiệu nguy hiểm nhất'); }
-  if (d.bundled > 3) { whaleScore -= 20; redFlags.push(d.bundled + ' lệnh mua gộp — Nghi vấn nội gián/bot'); }
-  whaleScore = Math.max(whaleScore, 0);
-  breakdown.push({ label: 'Cá voi & Nhà phát triển', score: whaleScore, color: scoreColor(whaleScore) });
+  // Verdict — kết hợp totalScore + giá thực tế
+  var verdict,vIcon,vSub,vColor;
+  var criticalFlags=d.devSelling||(critCount<1)||(redFlags.length>=3&&critCount<2);
+  var priceDangerous=d.priceChg<-30;
+  var priceWarning=d.priceChg<-15;
+  if(criticalFlags||priceDangerous){
+    verdict=d.priceChg<-50?'THOÁT NGAY':'KHÔNG MUA';vIcon='🔴';
+    vSub=priceDangerous?'Giá giảm '+Math.abs(d.priceChg).toFixed(0)+'% — không vào lệnh':'Dấu hiệu nguy hiểm nghiêm trọng';
+    vColor='var(--red)';
+  }else if(priceWarning){
+    verdict='CẨN THẬN';vIcon='🟠';vSub='Giá giảm '+Math.abs(d.priceChg).toFixed(0)+'% — theo dõi thêm';vColor='var(--orange)';
+  }else if(totalScore>=75){verdict='NÊN MUA';vIcon='🟢';vSub=d.name+' tín hiệu tốt — vào lệnh theo tranche';vColor='var(--green)';}
+  else if(totalScore>=50){verdict='CẨN THẬN';vIcon='🟡';vSub='Tín hiệu trung bình — chỉ lệnh nhỏ';vColor='var(--yellow)';}
+  else{verdict='KHÔNG MUA';vIcon='🔴';vSub='Rủi ro quá cao';vColor='var(--red)';}
 
-  // Aggregate (9 tiêu chí)
-  var allScores = [secScore, liqScore, volScore, holderScore, priceScore, ageScore, socialScore, sigScore, whaleScore];
-  var wArr = [0.18, 0.13, 0.08, 0.08, 0.12, 0.08, 0.08, 0.1, 0.15];
-  var totalScore = 0;
-  for (var i = 0; i < allScores.length; i++) totalScore += allScores[i] * wArr[i];
-  var safetyScore = (secScore * 0.5 + whaleScore * 0.3 + liqScore * 0.2);
-  var signalScore = (sigScore * 0.25 + volScore * 0.2 + socialScore * 0.15 + ageScore * 0.2 + priceScore * 0.2);
-  var riskScore = 100 - totalScore;
+  // ===== ZONE DETECTION =====
+  var pm5=multiTF.priceM5,ph1=multiTF.priceH1,ph6=multiTF.priceH6;
+  var vm5=multiTF.volM5,vh1=multiTF.volH1;
+  var hasMultiTF=pm5!==null||ph1!==null||ph6!==null||vm5!==null||vh1!==null;
+  var zone='unknown',zIcon='❓',zColor='var(--muted)',zBg='var(--elevated)',zTitle='',zDesc='',zSigs=[];
+  var tqBad=np<4||totalScore<35, tqWeak=np<7||totalScore<60, tmf=redFlags.length>=3;
 
-  // Verdict
-  var verdict, verdictIcon, verdictSub, verdictColor;
-  var stage = d.stage;
-  var criticalFlags = d.devSelling || (!d.noHoneypot && !d.mintRevoked && !d.lpBurned);
+  // Tính toán biến phụ trợ
+  var ph24=multiTF.priceH24!==null?multiTF.priceH24:d.priceChg;
 
-  if (criticalFlags && stage === 'considering') {
-    verdict = 'KHÔNG MUA'; verdictIcon = '🚫'; verdictSub = 'Phát hiện dấu hiệu nguy hiểm nghiêm trọng. Bỏ qua coin này.'; verdictColor = 'var(--red)';
-  } else if (criticalFlags) {
-    verdict = 'BÁN NGAY'; verdictIcon = '🔴'; verdictSub = 'Có dấu hiệu nguy hiểm. Thoát lệnh càng sớm càng tốt.'; verdictColor = 'var(--red)';
-  } else if (totalScore >= 75) {
-    if (stage === 'considering') { verdict = 'NÊN MUA'; verdictIcon = '🟢'; verdictSub = d.name + ' có tín hiệu tốt. Vào lệnh theo kế hoạch tranche.'; verdictColor = 'var(--green)'; }
-    else if (stage === 'holding') { verdict = 'GIỮ TIẾP'; verdictIcon = '🟢'; verdictSub = 'Tín hiệu tích cực. Tiếp tục giữ theo exit plan.'; verdictColor = 'var(--green)'; }
-    else if (stage === 'want-add') { verdict = 'CÓ THỂ MUA THÊM'; verdictIcon = '🟢'; verdictSub = 'Tín hiệu tốt, kiểm tra position size trước.'; verdictColor = 'var(--green)'; }
-    else { verdict = 'CHƯA CẦN BÁN'; verdictIcon = '🟡'; verdictSub = 'Tín hiệu khả quan. Bán theo scaled exit nếu đạt target.'; verdictColor = 'var(--yellow)'; }
-  } else if (totalScore >= 50) {
-    if (stage === 'considering') { verdict = 'CẨN THẬN'; verdictIcon = '🟡'; verdictSub = d.name + ' tín hiệu trung bình. Chỉ lệnh nhỏ nếu chấp nhận rủi ro.'; verdictColor = 'var(--yellow)'; }
-    else if (stage === 'holding') { verdict = 'THEO DÕI SÁT'; verdictIcon = '🟡'; verdictSub = 'Set stop-loss và sẵn sàng thoát nếu xấu đi.'; verdictColor = 'var(--yellow)'; }
-    else { verdict = 'CÂN NHẮC BÁN BỚT'; verdictIcon = '🟠'; verdictSub = 'Tín hiệu không mạnh. Chốt lời một phần.'; verdictColor = 'var(--orange)'; }
-  } else {
-    if (stage === 'considering') { verdict = 'KHÔNG MUA'; verdictIcon = '🔴'; verdictSub = d.name + ' có quá nhiều rủi ro. Tìm cơ hội khác.'; verdictColor = 'var(--red)'; }
-    else { verdict = 'NÊN BÁN'; verdictIcon = '🔴'; verdictSub = 'Điểm rủi ro cao. Cắt lỗ hoặc chốt lời còn lại.'; verdictColor = 'var(--red)'; }
+  if(hasMultiTF){
+    var shortPump=pm5!==null&&pm5>15, midPump=ph1!==null&&ph1>30, bigPump=ph6!==null&&ph6>50;
+    var shortDump=pm5!==null&&pm5<-10, midDump=ph1!==null&&ph1<-20;
+    var retracing=(ph1!==null&&ph1>20)&&(pm5!==null&&pm5<0);
+    var volDying=(vm5!==null&&vh1!==null&&vh1>0)&&(vm5*12<vh1*0.3);
+
+    // Danger thresholds: hạ xuống để bắt trường hợp giảm mạnh vừa
+    var h24Crash=ph24<-50;            // was -70
+    var h6Crash=ph6!==null&&ph6<-30;  // was -50
+    var vdz=(vh1!==null&&vh1<50)||(vm5!==null&&vm5<5);
+    var isDead=(ph24<-70)||(ph6!==null&&ph6<-50)||(vdz&&d.liq<10000)||isLikelyDead;
+
+    // Composite multi-TF weakness: nhiều khung thời gian cùng giảm
+    var multiTFWeak=(ph1!==null&&ph1<-10)&&(ph24<-30);
+    var h1Dump=ph1!==null&&ph1<-15;
+
+    // Post-pump crash: 24h vẫn dương cao nhưng các khung ngắn đang sập
+    var postPumpCrash=(ph24>50)&&(ph1!==null&&ph1<-15);
+    // Broader take-profit: h6 vẫn dương nhưng h1/5m đang giảm (đã qua đỉnh)
+    var postPeakRetrace=(ph6!==null&&ph6>30)&&(ph1!==null&&ph1<0);
+
+    if(criticalFlags||(midDump&&shortDump)||(tqBad&&tmf)||isDead||h24Crash||h6Crash||(multiTFWeak&&tqBad)){
+      // === DANGER ===
+      zone='danger';zIcon='🔴';zColor='var(--red)';zBg='rgba(239,68,68,0.12)';
+      zTitle=isDead?'TOKEN ĐÃ CHẾT':'NGUY HIỂM — Tránh xa';
+      zDesc=isDead?'Volume gần 0, thanh khoản cạn':'Giá giảm mạnh — không vào lệnh, cắt lỗ nếu đang giữ';
+      if(ph24<0) zSigs.push({t:'24h:'+ph24.toFixed(0)+'%',c:'var(--red)',b:'rgba(239,68,68,0.15)'});
+      if(ph1!==null&&ph1<0) zSigs.push({t:'1h:'+ph1.toFixed(0)+'%',c:'var(--red)',b:'rgba(239,68,68,0.15)'});
+      if(pm5!==null&&pm5<0) zSigs.push({t:'5m:'+pm5.toFixed(1)+'%',c:'var(--red)',b:'rgba(239,68,68,0.15)'});
+      zSigs.push({t:isDead?'DEAD':'STOP',c:'var(--red)',b:'rgba(239,68,68,0.15)'});
+
+    }else if(postPumpCrash||postPeakRetrace||((midPump||bigPump)&&(retracing||shortDump||volDying))){
+      // === CHỐT LỜI === (mở rộng: bắt post-pump crash + post-peak retrace)
+      zone='take-profit';zIcon='💰';zColor='var(--orange)';zBg='rgba(249,115,22,0.12)';
+      if(postPumpCrash){
+        zTitle='ĐANG SẬP SAU PUMP';zDesc='24h vẫn +'+ph24.toFixed(0)+'% nhưng 1h đã '+ph1.toFixed(0)+'% — chốt lời/thoát ngay';
+      }else{
+        zTitle='CHỐT LỜI';zDesc='Đã pump, đang retrace — chốt lời nếu đang giữ';
+      }
+      if(ph24>0) zSigs.push({t:'24h:+'+ph24.toFixed(0)+'%',c:'var(--green)',b:'rgba(34,197,94,0.12)'});
+      if(ph1!==null) zSigs.push({t:'1h:'+(ph1>=0?'+':'')+ph1.toFixed(0)+'%',c:ph1>=0?'var(--green)':'var(--red)',b:ph1>=0?'rgba(34,197,94,0.12)':'rgba(239,68,68,0.12)'});
+      if(retracing)zSigs.push({t:'RETRACE',c:'var(--orange)',b:'rgba(249,115,22,0.15)'});
+      zSigs.push({t:'CHỐT LỜI',c:'var(--orange)',b:'rgba(249,115,22,0.15)'});
+
+    }else if(ph24<-20||(h1Dump&&ph24<-10)||multiTFWeak){
+      // === ĐANG GIẢM === (mới: bắt moderate drops -20% đến -50%)
+      zone='caution';zIcon='📉';zColor='var(--red)';zBg='rgba(239,68,68,0.08)';
+      zTitle='ĐANG GIẢM';zDesc='Giá giảm '+Math.abs(ph24).toFixed(0)+'% — không nên vào lệnh mới';
+      if(ph24<0) zSigs.push({t:'24h:'+ph24.toFixed(0)+'%',c:'var(--red)',b:'rgba(239,68,68,0.12)'});
+      if(ph1!==null&&ph1<0) zSigs.push({t:'1h:'+ph1.toFixed(0)+'%',c:'var(--red)',b:'rgba(239,68,68,0.12)'});
+      zSigs.push({t:'GIẢM',c:'var(--red)',b:'rgba(239,68,68,0.12)'});
+
+    }else if(shortPump||midPump){
+      // === GIỮ LỆNH ===
+      zone='hold';zIcon='⚡';zColor='var(--cyan)';zBg='rgba(6,182,212,0.12)';
+      zTitle='GIỮ LỆNH';zDesc='Đang trong sóng tăng — giữ theo exit plan';
+      if(pm5!==null&&pm5>0)zSigs.push({t:'5m:+'+pm5.toFixed(1)+'%',c:'var(--green)',b:'rgba(34,197,94,0.12)'});
+      zSigs.push({t:'MOMENTUM',c:'var(--cyan)',b:'rgba(6,182,212,0.15)'});
+
+    }else if(isDyingMomentum){
+      // === ĐANG TỤT ===
+      zone='caution';zIcon='📉';zColor='var(--orange)';zBg='rgba(249,115,22,0.10)';
+      zTitle='ĐANG TỤT';zDesc='Volume rất thấp — cân nhắc thoát';
+      if(vh1!==null)zSigs.push({t:'Vol1h:$'+vh1.toFixed(0),c:'var(--red)',b:'rgba(239,68,68,0.12)'});
+
+    }else if(tqWeak||tmf||ph24<-10){
+      // === CẨN THẬN === (thêm: giảm nhẹ -10% đến -20% cũng cảnh báo)
+      zone='caution';zIcon='⚠️';zColor='var(--yellow)';zBg='rgba(234,179,8,0.10)';
+      var reason=ph24<-10?'Giá giảm '+Math.abs(ph24).toFixed(0)+'%':np+'/10 tiêu chí';
+      zTitle='CẨN THẬN';zDesc=reason+(tmf?' — '+redFlags.length+' cảnh báo':'');
+      if(ph24<0) zSigs.push({t:'24h:'+ph24.toFixed(0)+'%',c:'var(--yellow)',b:'rgba(234,179,8,0.12)'});
+      zSigs.push({t:np+'/10',c:'var(--yellow)',b:'rgba(234,179,8,0.12)'});
+
+    }else{
+      // === ENTRY OK === (chỉ khi giá thực sự ổn định: 24h > -10%)
+      zone='entry';zIcon='🟢';zColor='var(--green)';zBg='rgba(34,197,94,0.12)';
+      zTitle='ENTRY OK';zDesc='Giá ổn định, chưa pump'+(isNotable?' — đáng chú ý':'');
+      if(pm5!==null)zSigs.push({t:'5m:'+(pm5>=0?'+':'')+pm5.toFixed(1)+'%',c:pm5>=0?'var(--green)':'var(--yellow)',b:pm5>=0?'rgba(34,197,94,0.12)':'rgba(234,179,8,0.12)'});
+      zSigs.push({t:'ENTRY',c:'var(--green)',b:'rgba(34,197,94,0.15)'});
+    }
+  }else{
+    // Fallback: không có dữ liệu multi-TF
+    if(tqBad&&tmf){zone='danger';zIcon='🔴';zColor='var(--red)';zBg='rgba(239,68,68,0.12)';zTitle='NGUY HIỂM';zDesc='Chất lượng kém';}
+    else if(d.priceChg<-50){zone='danger';zIcon='🔴';zColor='var(--red)';zBg='rgba(239,68,68,0.12)';zTitle='NGUY HIỂM';zDesc=d.priceChg.toFixed(0)+'% — giảm rất mạnh';}
+    else if(d.priceChg<-20){zone='caution';zIcon='📉';zColor='var(--red)';zBg='rgba(239,68,68,0.08)';zTitle='ĐANG GIẢM';zDesc=d.priceChg.toFixed(0)+'% 24h';}
+    else if(d.priceChg>100){zone='take-profit';zIcon='💰';zColor='var(--orange)';zBg='rgba(249,115,22,0.12)';zTitle='CHỐT LỜI?';zDesc='+'+d.priceChg.toFixed(0)+'% 24h';}
+    else if(isDyingMomentum){zone='caution';zIcon='📉';zColor='var(--orange)';zBg='rgba(249,115,22,0.10)';zTitle='ĐANG TỤT';zDesc='Volume rất thấp — token đang mất lực';}
+    else if(d.priceChg<-10||tqWeak){zone='caution';zIcon='⚠️';zColor='var(--yellow)';zBg='rgba(234,179,8,0.10)';zTitle='CẨN THẬN';zDesc=(d.priceChg<-10?d.priceChg.toFixed(0)+'% ':'')+np+'/10 tiêu chí';}
+    else{zone='entry';zIcon='🟢';zColor='var(--green)';zBg='rgba(34,197,94,0.12)';zTitle='ENTRY OK';zDesc='Giá ổn định';}
+    zSigs.push({t:'24h:'+(d.priceChg>=0?'+':'')+d.priceChg.toFixed(0)+'%',c:zColor,b:zBg});
   }
 
   // ===== RENDER =====
-  document.getElementById('inputForm').style.display = 'none';
-  document.getElementById('results').classList.add('show');
+  document.getElementById('welcomeScreen').style.display='none';
+  document.getElementById('dashboard').classList.add('show');
 
-  // Token header if we have fetched data
-  var thEl = document.getElementById('tokenHeaderResult');
-  if (fetchedData) {
-    var p = fetchedData;
-    var imgUrl = (p.info && p.info.imageUrl) || '';
-    var imgTag = imgUrl ? '<img src="' + imgUrl + '" alt="">' : '<div style="width:48px;height:48px;border-radius:50%;background:var(--bg-elevated);display:flex;align-items:center;justify-content:center;font-size:22px;">' + (d.name.charAt(0) || '?') + '</div>';
-    var chainBadge = p.chainId ? '<span class="chain-badge">' + p.chainId + '</span>' : '';
-    var priceChgColor = d.priceChg >= 0 ? 'var(--green)' : 'var(--red)';
-    var priceChgSign = d.priceChg >= 0 ? '+' : '';
-    thEl.innerHTML = '<div class="token-header animate-in">'
-      + imgTag
-      + '<div class="info"><div class="name">' + d.name + chainBadge + '</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px;">' + ((p.baseToken && p.baseToken.address) || '').substring(0,16) + '...</div></div>'
-      + '<div><div class="price">$' + (p.priceUsd || '?') + '</div><div class="price-change" style="color:' + priceChgColor + '">' + priceChgSign + d.priceChg + '% (24h)</div></div>'
-      + '</div>';
-  } else {
-    thEl.innerHTML = '';
-  }
+  // Info strip
+  var is=document.getElementById('infoStrip');
+  var p=fetchedData;
+  var imgUrl=p&&p.info&&p.info.imageUrl?'<img src="'+p.info.imageUrl+'" style="width:28px;height:28px;border-radius:50%">':'';
+  var chain=p&&p.chainId?'<span class="chain">'+p.chainId+'</span>':'';
+  var prC=d.priceChg>=0?'var(--green)':'var(--red)';
+  var ageStr=d.age<60?d.age+'m':d.age<1440?(d.age/60).toFixed(1)+'h':(d.age/1440).toFixed(0)+'d';
 
-  // Quick stats
-  var qsEl = document.getElementById('quickStats');
-  var stats = [];
-  if (d.mcap) stats.push({ val: fmtNum(d.mcap), label: 'Vốn hóa' });
-  if (d.liq) stats.push({ val: fmtNum(d.liq), label: 'Thanh khoản' });
-  if (d.vol) stats.push({ val: fmtNum(d.vol), label: 'KL giao dịch 24h' });
-  if (d.age) {
-    var ageStr = d.age < 60 ? d.age + ' phút' : d.age < 1440 ? (d.age/60).toFixed(1) + ' giờ' : (d.age/1440).toFixed(0) + ' ngày';
-    stats.push({ val: ageStr, label: 'Tuổi token' });
-  }
-  if (d.holders) stats.push({ val: d.holders.toLocaleString(), label: 'Người giữ' });
-  var qsHTML = '';
-  for (var i = 0; i < stats.length; i++) {
-    qsHTML += '<div class="stat-card"><div class="stat-val">' + stats[i].val + '</div><div class="stat-label">' + stats[i].label + '</div></div>';
-  }
-  qsEl.innerHTML = qsHTML;
+  is.innerHTML='<div class="coin-id">'+imgUrl+'<span class="coin-name">'+d.name+'</span>'+chain+'</div>'
+    +'<span class="price-big">$'+(d.priceUsd||'?')+'</span>'
+    +'<span class="chg" style="color:'+prC+'">'+(d.priceChg>=0?'+':'')+d.priceChg.toFixed(1)+'%</span>'
+    +'<span class="stat-pill"><span class="sv">'+fmtNum(d.mcap)+'</span><span class="sl">MCap</span></span>'
+    +'<span class="stat-pill"><span class="sv">'+fmtNum(d.liq)+'</span><span class="sl">Liq</span></span>'
+    +'<span class="stat-pill"><span class="sv">'+fmtNum(d.vol)+'</span><span class="sl">Vol</span></span>'
+    +'<span class="stat-pill"><span class="sv">'+ageStr+'</span><span class="sl">Age</span></span>';
 
   // Verdict
-  document.getElementById('verdictIcon').textContent = verdictIcon;
-  document.getElementById('verdictText').textContent = verdict;
-  document.getElementById('verdictText').style.color = verdictColor;
-  document.getElementById('verdictSub').textContent = verdictSub;
+  document.getElementById('vIcon').textContent=vIcon;
+  document.getElementById('vText').textContent=verdict;
+  document.getElementById('vText').style.color=vColor;
+  document.getElementById('vSub').textContent=vSub;
 
-  setTimeout(function() {
-    setRing('ringTotal', 'valTotal', totalScore);
-    setRing('ringSafety', 'valSafety', safetyScore);
-    setRing('ringSignal', 'valSignal', signalScore);
-    setRing('ringRisk', 'valRisk', riskScore);
-  }, 200);
+  // Zone
+  var zs=document.getElementById('zoneStrip');
+  zs.style.background=zBg;
+  var zH='<div class="z-icon">'+zIcon+'</div><div class="z-info"><div class="z-title" style="color:'+zColor+'">'+zTitle+'</div><div class="z-desc">'+zDesc+'</div><div class="z-signals">';
+  for(var i=0;i<zSigs.length;i++) zH+='<span class="z-sig" style="color:'+zSigs[i].c+';background:'+zSigs[i].b+'">'+zSigs[i].t+'</span>';
+  zH+='</div>';
+  var mz=['entry','hold','take-profit','caution','danger'],mc=['var(--green)','var(--cyan)','var(--orange)','var(--yellow)','var(--red)'];
+  zH+='<div class="zone-meter">';
+  for(var i=0;i<mz.length;i++){var act=mz[i]===zone;zH+='<div style="background:'+(act?mc[i]:'var(--elevated)')+'"></div>';}
+  zH+='</div></div>';
+  zs.innerHTML=zH;
+
+  // Rings
+  setRing('ringTotal','valTotal',totalScore);
+  setRing('ringSafety','valSafety',safetyScore);
+  setRing('ringSignal','valSignal',signalScore);
+  setRing('ringRisk','valRisk',riskScore);
 
   // Breakdown
-  var bList = document.getElementById('breakdownList');
-  var bHTML = '';
-  for (var i = 0; i < breakdown.length; i++) {
-    var b = breakdown[i];
-    bHTML += '<div class="breakdown-row" style="border-left-color:' + b.color + '"><span class="label">' + b.label + '</span><div class="bar-wrap"><div class="bar-fill" style="width:' + b.score + '%;background:' + b.color + '"></div></div><span class="val" style="color:' + b.color + '">' + Math.round(b.score) + '</span></div>';
+  var bl=document.getElementById('breakdownList'),bH='';
+  for(var i=0;i<breakdown.length;i++){var b=breakdown[i];
+    bH+='<div class="bd-row" style="border-left-color:'+b.color+'"><span class="bl">'+b.label+'</span><div class="bw"><div class="bf" style="width:'+b.score+'%;background:'+b.color+'"></div></div><span class="bv" style="color:'+b.color+'">'+Math.round(b.score)+'</span></div>';
   }
-  bList.innerHTML = bHTML;
+  bl.innerHTML=bH;
 
-  // Red Flags
-  var rfSection = document.getElementById('redFlagSection');
-  var rfList = document.getElementById('redFlagList');
-  if (redFlags.length > 0) {
-    rfSection.style.display = 'block';
-    var rfHTML = '';
-    for (var i = 0; i < redFlags.length; i++) rfHTML += '<div class="warn-box"><span class="icon">🚩</span><span>' + redFlags[i] + '</span></div>';
-    rfList.innerHTML = rfHTML;
-  } else { rfSection.style.display = 'none'; }
-
-  // Recommendations
-  var recEl = document.getElementById('recommendations');
-  var recHTML = '';
-  var cap = d.capital || 1000;
-
-  // Price action advice
-  if (priceAdvice) {
-    var paColor = priceScore >= 60 ? 'var(--green)' : priceScore >= 40 ? 'var(--yellow)' : 'var(--red)';
-    recHTML += '<div class="rec-card" style="border-left-color:' + paColor + '"><h4 style="color:' + paColor + '">📊 Nhận xét giá hiện tại</h4><p>' + priceAdvice + '</p></div>';
+  // Notable
+  var nb=document.getElementById('notableBar');
+  var gc={S:'var(--green)',A:'var(--cyan)',B:'var(--yellow)',C:'var(--red)'};
+  var nH='<div class="nb-head"><span class="nb-grade" style="color:'+gc[nGrade]+'">'+nGrade+' Grade</span><span class="nb-pass">'+np+'/10 tiêu chí</span></div>';
+  nH+='<div class="crit-grid">';
+  for(var i=0;i<checks.length;i++){var c=checks[i];
+    nH+='<div class="crit-item '+(c.p?'pass':'fail')+'">'+(c.p?'✅':'❌')+' '+c.l+' <b>'+c.v+'</b></div>';
   }
+  nH+='</div>';
+  nb.innerHTML=nH;
 
-  if (totalScore >= 50 && (stage === 'considering' || stage === 'want-add')) {
-    recHTML += '<div class="rec-card" style="border-left-color:var(--green)"><h4 style="color:var(--green)">✅ Quy tắc 1% — Kích thước lệnh</h4><p>Với tổng vốn $' + cap + ', mỗi lệnh tối đa <strong style="color:var(--cyan)">$' + (cap*0.01).toFixed(0) + '</strong> (1%). Tối đa mỗi coin: <strong style="color:var(--yellow)">$' + (cap*0.05).toFixed(0) + '</strong> (5%).</p></div>';
-  }
+  // Red flags
+  var rf=document.getElementById('redFlagList'),rH='';
+  for(var i=0;i<redFlags.length;i++) rH+='<div class="rf-item">🚩 '+redFlags[i]+'</div>';
+  rf.innerHTML=rH;
 
-  if (stage === 'holding' || stage === 'want-sell') {
-    var pnl = d.invested > 0 ? ((d.curVal - d.invested) / d.invested * 100) : 0;
-    var pnlColor = pnl >= 0 ? 'var(--green)' : 'var(--red)';
-    recHTML += '<div class="rec-card" style="border-left-color:' + pnlColor + '"><h4 style="color:' + pnlColor + '">' + (pnl >= 0 ? '📈' : '📉') + ' Lãi/Lỗ: ' + (pnl >= 0 ? '+' : '') + pnl.toFixed(1) + '%</h4><p>Bỏ vào: $' + d.invested + ' → Hiện tại: $' + d.curVal.toFixed(2) + ' | ' + (pnl >= 0 ? 'Lãi' : 'Lỗ') + ': <strong style="color:' + pnlColor + '">$' + Math.abs(d.curVal - d.invested).toFixed(2) + '</strong></p></div>';
-    if (pnl >= 100) recHTML += '<div class="rec-card" style="border-left-color:var(--green)"><h4 style="color:var(--green)">🎯 Đã x' + (d.curVal/d.invested).toFixed(1) + ' — Bán theo từng bậc</h4><p>Chốt ít nhất 50% để thu vốn gốc, giữ phần còn lại chạy tự do.</p></div>';
-    else if (pnl <= -30) recHTML += '<div class="rec-card" style="border-left-color:var(--red)"><h4 style="color:var(--red)">⛔ Đang lỗ ' + Math.abs(pnl).toFixed(0) + '%</h4><p>Điểm thấp + lỗ lớn = cân nhắc cắt lỗ. Đừng giao dịch trả thù.</p></div>';
-  }
-
-  if (d.whaleSelling || d.devSelling) {
-    recHTML += '<div class="rec-card" style="border-left-color:var(--red)"><h4 style="color:var(--red)">🐋 Cá voi / Nhà phát triển đang bán</h4><p>' + (d.devSelling ? 'Ví nhà phát triển đang bán tháo — thoát ngay nếu có thể.' : 'Cá voi đang bán. Đặt điểm cắt lỗ ngay.') + '</p></div>';
-  }
-
-  recHTML += '<div class="warn-box info" style="margin-top:16px;"><span class="icon">📌</span><span><strong>Nhắc nhở:</strong> Đây chỉ là công cụ hỗ trợ, KHÔNG phải lời khuyên tài chính. Luôn tự nghiên cứu và chỉ đầu tư số tiền bạn sẵn sàng mất.</span></div>';
-  recEl.innerHTML = recHTML;
-
-  // Money plan
-  var moneyEl = document.getElementById('moneyPlan');
-  if (stage === 'considering' || stage === 'want-add') {
-    var buyAmt = cap * 0.05;
-    moneyEl.innerHTML = '<p style="color:var(--text-body);margin-bottom:16px;">Tổng vốn <strong style="color:var(--cyan)">$' + cap + '</strong> — Chiến lược chia 3 lệnh:</p>'
-      + '<table class="tranche-table"><thead><tr><th>Lệnh</th><th>%</th><th>Số tiền</th><th>Thời điểm</th></tr></thead><tbody>'
-      + '<tr><td>🟢 Thăm dò</td><td>30%</td><td class="highlight">$' + (buyAmt*0.3).toFixed(2) + '</td><td>Ngay khi có tín hiệu</td></tr>'
-      + '<tr><td>🔵 Xác nhận</td><td>40%</td><td class="highlight">$' + (buyAmt*0.4).toFixed(2) + '</td><td>Xác nhận xu hướng (5-15 phút)</td></tr>'
-      + '<tr><td>🟣 Đầy đủ</td><td>30%</td><td class="highlight">$' + (buyAmt*0.3).toFixed(2) + '</td><td>Khi tin tưởng cao nhất</td></tr>'
-      + '</tbody></table>'
-      + '<div class="warn-box info"><span class="icon">📐</span><span>Tối đa/lệnh: <strong>$' + (cap*0.01).toFixed(0) + '</strong> (1%) — Tối đa/coin: <strong>$' + (cap*0.05).toFixed(0) + '</strong> (5%) — Dự phòng: <strong>$' + (cap*0.2).toFixed(0) + '</strong> (20%)</span></div>';
-  } else {
-    var pctUsed = d.invested > 0 ? (d.invested / cap * 100).toFixed(1) : '0';
-    moneyEl.innerHTML = '<p style="color:var(--text-body)">Sử dụng <strong style="color:var(--cyan)">' + pctUsed + '%</strong> vốn ($' + d.invested + '/$' + cap + '). '
-      + (parseFloat(pctUsed) > 5 ? '<span style="color:var(--orange)">⚠ Vượt 5%!</span>' : '<span style="color:var(--green)">✅ An toàn.</span>') + '</p>';
-  }
-
-  // Exit plan
-  var exitEl = document.getElementById('exitPlan');
-  var entry = d.invested > 0 ? d.invested : 100;
-  var exitStepsHTML = '<div class="exit-steps">'
-    + '<div class="exit-step"><div class="exit-step-line"><div class="exit-dot" style="border-color:var(--green)"></div><div class="exit-line-seg"></div></div><div class="exit-content"><strong>Bán 25% khi lãi gấp 2</strong> ($' + (entry*2).toFixed(0) + ')<br><span>Thu hồi 50% vốn gốc — giảm rủi ro</span></div></div>'
-    + '<div class="exit-step"><div class="exit-step-line"><div class="exit-dot" style="border-color:var(--cyan)"></div><div class="exit-line-seg"></div></div><div class="exit-content"><strong>Bán 25% khi lãi gấp 5</strong> ($' + (entry*5).toFixed(0) + ')<br><span>Thu hồi toàn bộ vốn — từ đây là "tiền lời"</span></div></div>'
-    + '<div class="exit-step"><div class="exit-step-line"><div class="exit-dot" style="border-color:var(--purple)"></div><div class="exit-line-seg"></div></div><div class="exit-content"><strong>Bán 25% khi lãi gấp 10</strong> ($' + (entry*10).toFixed(0) + ')<br><span>Chốt lời lớn</span></div></div>'
-    + '<div class="exit-step"><div class="exit-step-line"><div class="exit-dot" style="border-color:var(--yellow)"></div><div class="exit-line-seg"></div></div><div class="exit-content"><strong>Giữ 25% còn lại</strong><br><span>Để chạy tự do, không áp lực — đã hoàn vốn</span></div></div>'
-    + '</div>';
-
-  if (stage === 'holding' || stage === 'want-sell') {
-    exitEl.innerHTML = '<p style="color:var(--text-body);margin-bottom:16px;">Bán theo từng bậc:</p>' + exitStepsHTML
-      + '<div class="warn-box"><span class="icon">⚡</span><span><strong>Thoát ngay nếu:</strong> Nhà phát triển bán, thanh khoản bị rút, khối lượng giao dịch về 0.</span></div>';
-  } else {
-    exitEl.innerHTML = '<p style="color:var(--text-body)">Lên kế hoạch chốt lời <em>trước</em> khi mua:</p>' + exitStepsHTML
-      + '<div class="sep"></div><p style="color:var(--text-muted);font-size:13px;"><strong>Cắt lỗ:</strong> Đặt tại -30% đến -50%. Không bao giờ để mất quá 1% tổng vốn trên 1 lệnh.</p>';
-  }
-
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  isFirstRender=false;
 }
 
-/* ===== RESET ===== */
-function resetForm() {
-  document.getElementById('inputForm').style.display = 'block';
-  document.getElementById('results').classList.remove('show');
-  fetchedData = null;
+/* ===== FETCH AND ANALYZE ===== */
+function fetchAndAnalyze() {
+  var input=document.getElementById('dexUrl').value;
+  if(!input.trim()){setStatus('Dán link DexScreener','error');return;}
+  var parsed=parseDexUrl(input);
+  if(!parsed){setStatus('Link không hợp lệ','error');return;}
+  var btn=document.getElementById('fetchBtn');
+  btn.disabled=true; btn.textContent='⟳';
+  setStatus('<span class="spin">⟳</span>','loading');
 
-  var rings = ['ringTotal','ringSafety','ringSignal','ringRisk'];
-  var vals = ['valTotal','valSafety','valSignal','valRisk'];
-  for (var i = 0; i < rings.length; i++) {
-    var el = document.getElementById(rings[i]); if (el) el.style.strokeDashoffset = 264;
-    var v = document.getElementById(vals[i]); if (v) v.textContent = '0';
+  function onResult(pair){
+    if(!pair){setStatus('Không tìm thấy','error');btn.disabled=false;btn.textContent='⚡ Phân tích';return;}
+    fetchedData=pair; fillFromPair(pair); analyze(); loadChart(pair); startAutoRefresh();
+    btn.disabled=false; btn.textContent='⚡ Phân tích';
+    setStatus('✅ '+new Date().toLocaleTimeString(),'success');
   }
-  // Clear auto-filled
-  var afs = document.querySelectorAll('.auto-filled');
-  for (var i = 0; i < afs.length; i++) afs[i].classList.remove('auto-filled');
 
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  if(parsed.type==='pair'){
+    var pU='https://api.dexscreener.com/latest/dex/pairs/'+parsed.chain+'/'+parsed.address;
+    var tU='https://api.dexscreener.com/latest/dex/tokens/'+parsed.address;
+    fetch(pU).then(function(r){return r.ok?r.json():null;}).then(function(data){
+      var pair=data?extractPair(data):null;
+      if(pair)onResult(pair); else return fetch(tU).then(function(r){return r.ok?r.json():null;}).then(function(d2){onResult(d2?extractPair(d2):null);});
+    }).catch(function(){fetch(tU).then(function(r){return r.ok?r.json():null;}).then(function(d2){onResult(d2?extractPair(d2):null);}).catch(function(){setStatus('Lỗi','error');btn.disabled=false;btn.textContent='⚡ Phân tích';});});
+  }else{
+    fetch('https://api.dexscreener.com/latest/dex/tokens/'+parsed.address)
+      .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+      .then(function(data){onResult(extractPair(data));})
+      .catch(function(){setStatus('Lỗi','error');btn.disabled=false;btn.textContent='⚡ Phân tích';});
+  }
 }
 
-/* ===== Allow Enter key on DexScreener input ===== */
-document.getElementById('dexUrl').addEventListener('keydown', function(e) {
-  if (e.key === 'Enter') { e.preventDefault(); fetchDex(); }
-});
+function loadChart(pair){
+  var iframe=document.getElementById('dexChart');
+  if(!pair)return;
+  var ch=pair.chainId||'solana', pa=pair.pairAddress||(pair.baseToken&&pair.baseToken.address)||'';
+  if(pa) iframe.src='https://dexscreener.com/'+ch+'/'+pa+'?embed=1&theme=dark&trades=0&info=0';
+}
 
-/* ===== Auto-calc giá trị hiện tại khi nhập số lượng token ===== */
-document.getElementById('tokenAmount').addEventListener('input', function() {
-  var amount = parseFloat(this.value) || 0;
-  var price = parseFloat(document.getElementById('priceUsd').value) || 0;
-  var cvEl = document.getElementById('currentValue');
-  if (amount > 0 && price > 0) {
-    cvEl.value = '$' + (amount * price).toFixed(2);
-  } else {
-    cvEl.value = '';
+/* ===== AUTO REFRESH ===== */
+function startAutoRefresh(){
+  stopAutoRefresh(); autoRefreshEnabled=true;
+  document.getElementById('refreshInfo').style.display='flex';
+  document.getElementById('rDot').classList.remove('paused');
+  document.getElementById('autoRefreshToggle').textContent='⏸';
+  autoRefreshTimer=setInterval(function(){if(autoRefreshEnabled)silentRefresh();},AUTO_REFRESH_INTERVAL);
+}
+function stopAutoRefresh(){if(autoRefreshTimer){clearInterval(autoRefreshTimer);autoRefreshTimer=null;}autoRefreshEnabled=false;}
+function toggleAutoRefresh(){
+  if(autoRefreshEnabled){stopAutoRefresh();document.getElementById('autoRefreshToggle').textContent='▶';document.getElementById('rDot').classList.add('paused');}
+  else{startAutoRefresh();}
+}
+function silentRefresh(){
+  var input=document.getElementById('dexUrl').value;if(!input.trim())return;
+  var parsed=parseDexUrl(input);if(!parsed)return;
+  function onR(pair){if(!pair)return;fetchedData=pair;fillFromPair(pair);analyze();
+    document.getElementById('lastRefreshInfo').textContent=new Date().toLocaleTimeString();
   }
-});
+  if(parsed.type==='pair'){
+    var pU='https://api.dexscreener.com/latest/dex/pairs/'+parsed.chain+'/'+parsed.address;
+    var tU='https://api.dexscreener.com/latest/dex/tokens/'+parsed.address;
+    fetch(pU).then(function(r){return r.ok?r.json():null;}).then(function(data){
+      var pair=data?extractPair(data):null;
+      if(pair)onR(pair);else return fetch(tU).then(function(r){return r.ok?r.json():null;}).then(function(d2){onR(d2?extractPair(d2):null);});
+    }).catch(function(){});
+  }else{
+    fetch('https://api.dexscreener.com/latest/dex/tokens/'+parsed.address)
+      .then(function(r){return r.ok?r.json():null;}).then(function(data){if(data)onR(extractPair(data));}).catch(function(){});
+  }
+}
+
+document.getElementById('dexUrl').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();fetchAndAnalyze();}});
+
+// URL param auto-load
+(function(){
+  var params=new URLSearchParams(window.location.search);
+  var url=params.get('url');
+  if(url){document.getElementById('dexUrl').value=url;setTimeout(fetchAndAnalyze,100);}
+})();
 </script>
 </body>
 </html>
