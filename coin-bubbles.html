@@ -112,32 +112,6 @@
   }
   @keyframes shimmer { 0%{background-position:200% 0;} 100%{background-position:-200% 0;} }
 
-  /* Config */
-  .config-bar {
-    margin-bottom:20px; padding:14px 18px; border-radius:12px;
-    background:var(--card); border:1px solid var(--border);
-  }
-  .config-bar summary {
-    cursor:pointer; font-size:13px; color:var(--cyan); font-weight:600;
-    list-style:none; display:flex; align-items:center; gap:6px;
-  }
-  .config-bar summary::before { content:'⚙️'; }
-  .config-body { margin-top:12px; }
-  .config-body textarea {
-    width:100%; min-height:80px; background:var(--bg); border:1px solid var(--border);
-    border-radius:8px; padding:10px 14px; color:var(--text); font-size:12px;
-    font-family:monospace; resize:vertical; outline:none;
-  }
-  .config-body textarea:focus { border-color:var(--cyan); }
-  .config-hint { font-size:11px; color:var(--dim); margin-top:6px; }
-  .config-actions { display:flex; gap:8px; margin-top:10px; }
-  .config-actions button {
-    padding:8px 16px; border-radius:8px; border:none; font-size:12px;
-    font-weight:600; cursor:pointer; transition:all 0.2s;
-  }
-  .btn-apply { background:linear-gradient(135deg,var(--cyan),var(--green)); color:#fff; }
-  .btn-apply:hover { box-shadow:0 4px 15px rgba(6,182,212,0.3); }
-
   /* Timer bar */
   .timer-bar { height:2px; background:var(--elevated); border-radius:1px; margin-bottom:20px; overflow:hidden; }
   .timer-fill { height:100%; background:var(--cyan); border-radius:1px; transition:width 0.3s linear; }
@@ -188,17 +162,6 @@
 
   <div class="timer-bar"><div class="timer-fill" id="timerFill" style="width:100%"></div></div>
 
-  <details class="config-bar">
-    <summary>Cấu hình danh sách token</summary>
-    <div class="config-body">
-      <textarea id="tokenList" placeholder="Mỗi dòng 1 token address hoặc link DexScreener..."></textarea>
-      <div class="config-hint">Mỗi dòng 1 token address hoặc link dexscreener.com. Tối đa 30 token.</div>
-      <div class="config-actions">
-        <button class="btn-apply" onclick="applyConfig()">Áp dụng & Refresh</button>
-      </div>
-    </div>
-  </details>
-
   <!-- Notable Section -->
   <div class="zone-section" id="notableSection">
     <div class="zone-header">
@@ -222,9 +185,25 @@
 
 <script>
 // ===== CONFIG =====
-var DEFAULT_TOKENS = [
-  'MMva4aXq1YAQ8MxwM3rxSNsDiqEpUnkqwTdAXDCpump',
+var MAX_TOKENS = 150;
+var REFRESH_INTERVAL = 30000;
+var tokenAddresses = [];
+var coinData = {};
+var paused = false;
+var refreshTimer = null;
+var timerStart = 0;
+var timerRAF = null;
+
+// ===== DANH SÁCH CỐ ĐỊNH =====
+var FIXED_TOKENS = [
+  'GuTecn3KdS8aE9eitbCKKBL5qqvfRApaLhnosCPSMxa4',
   'Hg89fkZ9Yf4aAbKY6AfPk3NWKtkMXKcTe9PQHGTrmvFo',
+  'AaQk33y9LGhRKHfWmkPZJPa5jDFMe5g1g5JcvnBopump',
+  '8NU1NGvbBvTHexaiw29fdxzUKid8vYWSJmLZ5vh5pump',
+  'C4EWro3zUJ6SmFDBf97f4i3DH1vYDujSXEKDBgsLpump',
+  '2kVteX52kN5BpmuTpxdh5ucJqhTJc739yi7bzQqNpump',
+  'CQRzwRvKvnPdGcWgSZWGWXHBuajCpDDJUnYT56i4pump',
+  'DXMQS6xEgvAhLoBdr6c3dTRtg4VygsDxLRHPcYKypump',
   'GrPy4PkFj13un2y3ko3g2nwi2QzsBTvWXq2GCmVnpump',
   '72AyWfN3CWf3Q9h5DorqVmYnkjaAgCZjrTuB73JGpump',
   '9ucA1tsn1wTsGX7kjC83phxJQKLYjbswhaSQfs2Dpump',
@@ -319,43 +298,104 @@ var DEFAULT_TOKENS = [
   'D55RcS7ocJhd1BXTmiuE3LBvJz1KxrRbjqvHFiaXpump'
 ];
 
-var REFRESH_INTERVAL = 30000; // 30 giây — tránh rate limit DexScreener
-var tokenAddresses = DEFAULT_TOKENS.slice();
-var coinData = {};      // address → analyzed data
-var paused = false;
-var refreshTimer = null;
-var timerStart = 0;
-var timerRAF = null;
-
-// ===== INIT =====
-document.getElementById('tokenList').value = tokenAddresses.join('\n');
-showLoading();
-fetchAllTokens();
-
-// ===== PARSE ADDRESS =====
-function parseAddr(input) {
-  input = input.trim();
-  if (!input || input.startsWith('#') || input.startsWith('//')) return null;
-  var m = input.match(/dexscreener\.com\/[^\/]+\/([^\/?#]+)/);
-  if (m) return m[1];
-  if (/^[a-zA-Z0-9]{20,}$/.test(input)) return input;
+// ===== CACHE (localStorage) =====
+function saveCache() {
+  try {
+    localStorage.setItem('cb_tokens', JSON.stringify(tokenAddresses));
+    localStorage.setItem('cb_data', JSON.stringify(coinData));
+    localStorage.setItem('cb_time', Date.now().toString());
+  } catch(e) {}
+}
+function loadCache() {
+  try {
+    var t = JSON.parse(localStorage.getItem('cb_tokens') || '[]');
+    var d = JSON.parse(localStorage.getItem('cb_data') || '{}');
+    var ts = parseInt(localStorage.getItem('cb_time') || '0');
+    if (t.length > 0 && (Date.now() - ts) < 300000) return { tokens: t, data: d };
+  } catch(e) {}
   return null;
 }
 
-// ===== CONFIG =====
-function applyConfig() {
-  var lines = document.getElementById('tokenList').value.split('\n');
-  var addrs = [];
-  for (var i = 0; i < lines.length; i++) {
-    var a = parseAddr(lines[i]);
-    if (a && addrs.indexOf(a) === -1) addrs.push(a);
-  }
-  if (addrs.length === 0) return;
-  tokenAddresses = addrs.slice(0, 30);
-  coinData = {};
-  showLoading();
-  fetchAllTokens();
+// ===== FETCH TRENDING (GeckoTerminal) & MERGE VỚI DANH SÁCH CỐ ĐỊNH =====
+function fetchTrending() {
+  document.getElementById('statusText').textContent = 'Đang lấy trending...';
+
+  var urls = [];
+  var GECKO = 'https://api.geckoterminal.com/api/v2/networks/solana';
+  // 5 pages trending (volume thật) + 2 pages new
+  for (var p = 1; p <= 5; p++) urls.push(GECKO + '/trending_pools?page=' + p);
+  for (var p = 1; p <= 2; p++) urls.push(GECKO + '/new_pools?page=' + p);
+
+  Promise.all(urls.map(function(u) {
+    return fetch(u).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
+  })).then(function(results) {
+    var seen = {};
+    var trendingAddrs = [];
+
+    // Parse GeckoTerminal results
+    for (var r = 0; r < results.length; r++) {
+      if (!results[r] || !results[r].data) continue;
+      var pools = results[r].data;
+      if (!Array.isArray(pools)) continue;
+      for (var i = 0; i < pools.length; i++) {
+        var pool = pools[i];
+        var tid = pool.relationships && pool.relationships.base_token && pool.relationships.base_token.data && pool.relationships.base_token.data.id;
+        if (!tid) continue;
+        var addr = tid.replace('solana_', '');
+        if (!addr || addr.length < 20 || seen[addr]) continue;
+        seen[addr] = true;
+        trendingAddrs.push(addr);
+      }
+    }
+
+    // Merge: cố định trước, trending sau, loại trùng
+    var merged = [];
+    for (var i = 0; i < FIXED_TOKENS.length; i++) {
+      var a = FIXED_TOKENS[i];
+      if (!seen[a]) { seen[a] = true; merged.push(a); }
+      else merged.push(a); // đã có trong trending nhưng vẫn giữ
+    }
+    // Thêm cố định vào seen để loại trùng
+    var seenAll = {};
+    for (var i = 0; i < merged.length; i++) seenAll[merged[i]] = true;
+    for (var i = 0; i < trendingAddrs.length; i++) {
+      if (!seenAll[trendingAddrs[i]]) {
+        seenAll[trendingAddrs[i]] = true;
+        merged.push(trendingAddrs[i]);
+      }
+    }
+
+    merged = merged.slice(0, MAX_TOKENS);
+    tokenAddresses = merged;
+    coinData = {};
+    document.getElementById('statusText').textContent = 'Đang tải ' + FIXED_TOKENS.length + ' cố định + ' + trendingAddrs.length + ' trending...';
+    showLoading();
+    fetchAllTokens();
+  }).catch(function() {
+    // API lỗi → chỉ dùng danh sách cố định
+    tokenAddresses = FIXED_TOKENS.slice();
+    coinData = {};
+    document.getElementById('statusText').textContent = 'API trending lỗi — dùng ' + FIXED_TOKENS.length + ' coin cố định';
+    showLoading();
+    fetchAllTokens();
+  });
 }
+
+// ===== INIT =====
+(function() {
+  var cache = loadCache();
+  if (cache) {
+    tokenAddresses = cache.tokens;
+    coinData = cache.data;
+    renderBubbles();
+    var age = Math.round((Date.now() - parseInt(localStorage.getItem('cb_time') || '0')) / 1000);
+    document.getElementById('statusText').textContent = 'Cache ' + age + 's trước — ' + tokenAddresses.length + ' token — đang cập nhật...';
+    setTimeout(fetchTrending, 500);
+  } else {
+    showLoading();
+    fetchTrending();
+  }
+})();
 
 // ===== PAUSE =====
 function togglePause() {
@@ -400,6 +440,7 @@ function fetchAllTokens() {
         }
       }
       renderBubbles();
+      saveCache();
       var now = new Date();
       document.getElementById('statusText').textContent = 'Cập nhật: ' + now.toLocaleTimeString() + ' — ' + Object.keys(byToken).length + '/' + tokenAddresses.length + ' token';
       scheduleRefresh();
