@@ -252,7 +252,7 @@
 
 <script>
 var fetchedData = null;
-var multiTF = { priceM5:null, priceH1:null, priceH6:null, priceH24:null, volM5:null, volH1:null, volH6:null };
+var multiTF = { priceM5:null, priceH1:null, priceH6:null, priceH24:null, volM5:null, volH1:null, volH6:null, buys24:0, sells24:0, buysH1:0, sellsH1:0 };
 var autoRefreshTimer = null, autoRefreshEnabled = true, AUTO_REFRESH_INTERVAL = 3000;
 var isFirstRender = true;
 
@@ -311,9 +311,12 @@ function fillFromPair(p) {
   if (p.volume) { multiTF.volM5=p.volume.m5!==undefined?p.volume.m5:null; multiTF.volH1=p.volume.h1!==undefined?p.volume.h1:null; multiTF.volH6=p.volume.h6!==undefined?p.volume.h6:null; }
   if (p.pairCreatedAt) setField('tokenAge', Math.round((Date.now()-p.pairCreatedAt)/60000));
   if (p.priceUsd) setField('priceUsd', p.priceUsd);
-  if (p.txns && p.txns.h24) setField('txns', (p.txns.h24.buys||0)+' mua / '+(p.txns.h24.sells||0)+' bán');
+  if (p.txns && p.txns.h24) {
+    setField('txns', (p.txns.h24.buys||0)+' mua / '+(p.txns.h24.sells||0)+' bán');
+    multiTF.buys24=p.txns.h24.buys||0; multiTF.sells24=p.txns.h24.sells||0;
+  }
   var rS=0,rB=0;
-  if(p.txns&&p.txns.h1){rB=p.txns.h1.buys||0;rS=p.txns.h1.sells||0;}
+  if(p.txns&&p.txns.h1){rB=p.txns.h1.buys||0;rS=p.txns.h1.sells||0;multiTF.buysH1=rB;multiTF.sellsH1=rS;}
   if(rS>0&&rB>0&&(rS/rB)>3) autoCheck('whaleSelling');
   autoUncheck('hasTwitter'); autoUncheck('hasTelegram'); autoUncheck('hasWebsite');
   if(p.info&&p.info.socials) for(var i=0;i<p.info.socials.length;i++){var s=p.info.socials[i]; if(s.type==='twitter')autoCheck('hasTwitter'); if(s.type==='telegram')autoCheck('hasTelegram');}
@@ -503,10 +506,23 @@ function analyze() {
     var multiTFWeak=(ph1!==null&&ph1<-10)&&(ph24<-30);
     var h1Dump=ph1!==null&&ph1<-15;
 
-    // Post-pump crash: 24h vẫn dương cao nhưng các khung ngắn đang sập
+    // Post-pump crash: đã dump rồi → caution, không phải chốt lời
     var postPumpCrash=(ph24>50)&&(ph1!==null&&ph1<-15);
-    // Broader take-profit: h6 vẫn dương nhưng h1/5m đang giảm (đã qua đỉnh)
-    var postPeakRetrace=(ph6!==null&&ph6>30)&&(ph1!==null&&ph1<0);
+    // Chốt lời SỚM: đang ở đỉnh pump, momentum bắt đầu yếu (chưa dump hẳn)
+    var peakPump=(ph1!==null&&ph1>25)&&(pm5!==null&&pm5<ph1/6);
+    var bigPumpPeak=(ph6!==null&&ph6>40)&&(ph1!==null&&ph1>5&&ph1<25);
+    var volFading=(vm5!==null&&vh1!==null&&vh1>0)&&(vm5*12<vh1*0.5);
+    // Post-major-pump consolidation: pump lớn (>100% 24h) nhưng h1/h6 đã flat → đang ở đỉnh
+    var postMajorPump=(ph24>100)&&(ph1!==null&&Math.abs(ph1)<5)&&(ph6!==null&&ph6<20);
+
+    // Entry cần LỰC MUA THẬT: buy pressure mạnh + momentum ngắn hạn dương + không đang dump
+    var totalTxns24=multiTF.buys24+multiTF.sells24;
+    var buyPressure=totalTxns24>0?(multiTF.buys24/totalTxns24*100):0;
+    var hasBuyMomentum=buyPressure>=55&&totalTxns24>=10;
+    var shortPositive=(pm5!==null&&pm5>1)||(ph1!==null&&ph1>3);
+    var m5Dumping=pm5!==null&&pm5<-8;
+    var h1SellingMore=(multiTF.buysH1+multiTF.sellsH1)>10&&multiTF.sellsH1>multiTF.buysH1*1.1;
+    var isEntryWorthy=hasBuyMomentum&&shortPositive&&!m5Dumping&&!h1SellingMore&&np>=5&&!tqWeak;
 
     if(criticalFlags||(midDump&&shortDump)||(tqBad&&tmf)||isDead||h24Crash||h6Crash||(multiTFWeak&&tqBad)){
       // === DANGER ===
@@ -518,21 +534,28 @@ function analyze() {
       if(pm5!==null&&pm5<0) zSigs.push({t:'5m:'+pm5.toFixed(1)+'%',c:'var(--red)',b:'rgba(239,68,68,0.15)'});
       zSigs.push({t:isDead?'DEAD':'STOP',c:'var(--red)',b:'rgba(239,68,68,0.15)'});
 
-    }else if(postPumpCrash||postPeakRetrace||((midPump||bigPump)&&(retracing||shortDump||volDying))){
-      // === CHỐT LỜI === (mở rộng: bắt post-pump crash + post-peak retrace)
+    }else if(postPumpCrash){
+      // === SẬP SAU PUMP → caution (đã dump rồi, không còn gì để chốt)
+      zone='caution';zIcon='📉';zColor='var(--red)';zBg='rgba(239,68,68,0.08)';
+      zTitle='SẬP SAU PUMP';zDesc='24h vẫn +'+ph24.toFixed(0)+'% nhưng 1h đã '+ph1.toFixed(0)+'% — đã qua đỉnh';
+      if(ph24>0) zSigs.push({t:'24h:+'+ph24.toFixed(0)+'%',c:'var(--green)',b:'rgba(34,197,94,0.12)'});
+      zSigs.push({t:'1h:'+ph1.toFixed(0)+'%',c:'var(--red)',b:'rgba(239,68,68,0.12)'});
+      zSigs.push({t:'SẬP',c:'var(--red)',b:'rgba(239,68,68,0.12)'});
+
+    }else if(peakPump||bigPumpPeak||postMajorPump||((midPump||bigPump)&&volFading)){
+      // === CHỐT LỜI === (detect SỚM: đang ở đỉnh, momentum yếu dần)
       zone='take-profit';zIcon='💰';zColor='var(--orange)';zBg='rgba(249,115,22,0.12)';
-      if(postPumpCrash){
-        zTitle='ĐANG SẬP SAU PUMP';zDesc='24h vẫn +'+ph24.toFixed(0)+'% nhưng 1h đã '+ph1.toFixed(0)+'% — chốt lời/thoát ngay';
+      if(postMajorPump){
+        zTitle='ĐÃ PUMP — CHỐT';zDesc='24h +'+ph24.toFixed(0)+'% nhưng momentum đã flat — nên chốt lời';
       }else{
-        zTitle='CHỐT LỜI';zDesc='Đã pump, đang retrace — chốt lời nếu đang giữ';
+        zTitle='CHỐT LỜI';zDesc='Đang ở vùng đỉnh, momentum yếu dần — chốt lời nếu đang giữ';
       }
       if(ph24>0) zSigs.push({t:'24h:+'+ph24.toFixed(0)+'%',c:'var(--green)',b:'rgba(34,197,94,0.12)'});
       if(ph1!==null) zSigs.push({t:'1h:'+(ph1>=0?'+':'')+ph1.toFixed(0)+'%',c:ph1>=0?'var(--green)':'var(--red)',b:ph1>=0?'rgba(34,197,94,0.12)':'rgba(239,68,68,0.12)'});
-      if(retracing)zSigs.push({t:'RETRACE',c:'var(--orange)',b:'rgba(249,115,22,0.15)'});
       zSigs.push({t:'CHỐT LỜI',c:'var(--orange)',b:'rgba(249,115,22,0.15)'});
 
     }else if(ph24<-20||(h1Dump&&ph24<-10)||multiTFWeak){
-      // === ĐANG GIẢM === (mới: bắt moderate drops -20% đến -50%)
+      // === ĐANG GIẢM ===
       zone='caution';zIcon='📉';zColor='var(--red)';zBg='rgba(239,68,68,0.08)';
       zTitle='ĐANG GIẢM';zDesc='Giá giảm '+Math.abs(ph24).toFixed(0)+'% — không nên vào lệnh mới';
       if(ph24<0) zSigs.push({t:'24h:'+ph24.toFixed(0)+'%',c:'var(--red)',b:'rgba(239,68,68,0.12)'});
@@ -552,8 +575,16 @@ function analyze() {
       zTitle='ĐANG TỤT';zDesc='Volume rất thấp — cân nhắc thoát';
       if(vh1!==null)zSigs.push({t:'Vol1h:$'+vh1.toFixed(0),c:'var(--red)',b:'rgba(239,68,68,0.12)'});
 
+    }else if(isEntryWorthy){
+      // === ENTRY OK === (chỉ khi có lực mua mạnh + momentum dương thực sự)
+      zone='entry';zIcon='🟢';zColor='var(--green)';zBg='rgba(34,197,94,0.12)';
+      zTitle='ENTRY OK';zDesc='Lực mua mạnh ('+buyPressure.toFixed(0)+'%), momentum dương'+(isNotable?' — đáng chú ý':'');
+      if(pm5!==null)zSigs.push({t:'5m:'+(pm5>=0?'+':'')+pm5.toFixed(1)+'%',c:pm5>=0?'var(--green)':'var(--yellow)',b:pm5>=0?'rgba(34,197,94,0.12)':'rgba(234,179,8,0.12)'});
+      zSigs.push({t:'BUY '+buyPressure.toFixed(0)+'%',c:'var(--green)',b:'rgba(34,197,94,0.12)'});
+      zSigs.push({t:'ENTRY',c:'var(--green)',b:'rgba(34,197,94,0.15)'});
+
     }else if(tqWeak||tmf||ph24<-10){
-      // === CẨN THẬN === (thêm: giảm nhẹ -10% đến -20% cũng cảnh báo)
+      // === CẨN THẬN ===
       zone='caution';zIcon='⚠️';zColor='var(--yellow)';zBg='rgba(234,179,8,0.10)';
       var reason=ph24<-10?'Giá giảm '+Math.abs(ph24).toFixed(0)+'%':np+'/10 tiêu chí';
       zTitle='CẨN THẬN';zDesc=reason+(tmf?' — '+redFlags.length+' cảnh báo':'');
@@ -561,21 +592,25 @@ function analyze() {
       zSigs.push({t:np+'/10',c:'var(--yellow)',b:'rgba(234,179,8,0.12)'});
 
     }else{
-      // === ENTRY OK === (chỉ khi giá thực sự ổn định: 24h > -10%)
-      zone='entry';zIcon='🟢';zColor='var(--green)';zBg='rgba(34,197,94,0.12)';
-      zTitle='ENTRY OK';zDesc='Giá ổn định, chưa pump'+(isNotable?' — đáng chú ý':'');
+      // === TRUNG TÍNH === (không có tín hiệu mạnh → theo dõi)
+      zone='caution';zIcon='⚠️';zColor='var(--yellow)';zBg='rgba(234,179,8,0.10)';
+      zTitle='TRUNG TÍNH';zDesc='Không có tín hiệu mua mạnh — theo dõi thêm';
       if(pm5!==null)zSigs.push({t:'5m:'+(pm5>=0?'+':'')+pm5.toFixed(1)+'%',c:pm5>=0?'var(--green)':'var(--yellow)',b:pm5>=0?'rgba(34,197,94,0.12)':'rgba(234,179,8,0.12)'});
-      zSigs.push({t:'ENTRY',c:'var(--green)',b:'rgba(34,197,94,0.15)'});
+      zSigs.push({t:'THEO DÕI',c:'var(--yellow)',b:'rgba(234,179,8,0.12)'});
     }
   }else{
     // Fallback: không có dữ liệu multi-TF
+    var fbTotalTxns=multiTF.buys24+multiTF.sells24;
+    var fbBuyPressure=fbTotalTxns>0?(multiTF.buys24/fbTotalTxns*100):0;
+    var fbEntryOk=fbBuyPressure>=55&&fbTotalTxns>=10&&d.priceChg>0&&np>=5&&!tqWeak;
     if(tqBad&&tmf){zone='danger';zIcon='🔴';zColor='var(--red)';zBg='rgba(239,68,68,0.12)';zTitle='NGUY HIỂM';zDesc='Chất lượng kém';}
     else if(d.priceChg<-50){zone='danger';zIcon='🔴';zColor='var(--red)';zBg='rgba(239,68,68,0.12)';zTitle='NGUY HIỂM';zDesc=d.priceChg.toFixed(0)+'% — giảm rất mạnh';}
     else if(d.priceChg<-20){zone='caution';zIcon='📉';zColor='var(--red)';zBg='rgba(239,68,68,0.08)';zTitle='ĐANG GIẢM';zDesc=d.priceChg.toFixed(0)+'% 24h';}
-    else if(d.priceChg>100){zone='take-profit';zIcon='💰';zColor='var(--orange)';zBg='rgba(249,115,22,0.12)';zTitle='CHỐT LỜI?';zDesc='+'+d.priceChg.toFixed(0)+'% 24h';}
+    else if(d.priceChg>100){zone='take-profit';zIcon='💰';zColor='var(--orange)';zBg='rgba(249,115,22,0.12)';zTitle='ĐÃ PUMP — CHỐT';zDesc='+'+d.priceChg.toFixed(0)+'% 24h — nên chốt lời';}
     else if(isDyingMomentum){zone='caution';zIcon='📉';zColor='var(--orange)';zBg='rgba(249,115,22,0.10)';zTitle='ĐANG TỤT';zDesc='Volume rất thấp — token đang mất lực';}
+    else if(fbEntryOk){zone='entry';zIcon='🟢';zColor='var(--green)';zBg='rgba(34,197,94,0.12)';zTitle='ENTRY OK';zDesc='Lực mua '+fbBuyPressure.toFixed(0)+'%';}
     else if(d.priceChg<-10||tqWeak){zone='caution';zIcon='⚠️';zColor='var(--yellow)';zBg='rgba(234,179,8,0.10)';zTitle='CẨN THẬN';zDesc=(d.priceChg<-10?d.priceChg.toFixed(0)+'% ':'')+np+'/10 tiêu chí';}
-    else{zone='entry';zIcon='🟢';zColor='var(--green)';zBg='rgba(34,197,94,0.12)';zTitle='ENTRY OK';zDesc='Giá ổn định';}
+    else{zone='caution';zIcon='⚠️';zColor='var(--yellow)';zBg='rgba(234,179,8,0.10)';zTitle='TRUNG TÍNH';zDesc='Không có tín hiệu mua mạnh';}
     zSigs.push({t:'24h:'+(d.priceChg>=0?'+':'')+d.priceChg.toFixed(0)+'%',c:zColor,b:zBg});
   }
 

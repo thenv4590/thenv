@@ -248,7 +248,7 @@ function loadCache() {
 
 // ===== FETCH SIGNAL ADDRESSES TỪ SUPABASE =====
 function fetchSignalAddresses() {
-  return fetch(SUPABASE_URL + '/signal_history?select=token_address&order=detected_at.desc&limit=100', {
+  return fetch(SUPABASE_URL + '/signal_history?select=token_address&order=detected_at.desc&limit=' + MAX_TOKENS, {
     headers: {
       'apikey': SUPABASE_KEY,
       'Authorization': 'Bearer ' + SUPABASE_KEY,
@@ -486,28 +486,48 @@ function analyzeToken(p) {
   var multiTFWeak = (ph1 !== null && ph1 < -10) && (ph24 < -30);
   var h1Dump = ph1 !== null && ph1 < -15;
 
-  // Post-pump crash / post-peak retrace (mới)
+  // Post-pump crash → chuyển sang caution thay vì chốt lời (đã dump rồi, ko còn gì để chốt)
   var postPumpCrash = (ph24 > 50) && (ph1 !== null && ph1 < -15);
-  var postPeakRetrace = (ph6 !== null && ph6 > 30) && (ph1 !== null && ph1 < 0);
+  // Chốt lời SỚM: đang ở đỉnh pump, momentum bắt đầu yếu (chưa dump hẳn)
+  var peakPump = (ph1 !== null && ph1 > 25) && (pm5 !== null && pm5 < ph1 / 6);  // m5 chậm hơn kỳ vọng
+  var bigPumpPeak = (ph6 !== null && ph6 > 40) && (ph1 !== null && ph1 > 5 && ph1 < 25); // h6 lớn, h1 yếu dần
+  var volFading = d.volM5 > 0 && d.volH1 > 0 && (d.volM5 * 12 < d.volH1 * 0.5); // vol đang giảm nhanh
+  // Post-major-pump consolidation: pump lớn (>100% 24h) nhưng h1/h6 đã flat → đang ở đỉnh, nên chốt
+  var postMajorPump = (ph24 > 100) && (ph1 !== null && Math.abs(ph1) < 5) && (ph6 !== null && ph6 < 20);
 
   var qualityWeak = pass < 7 || aiScore < 60;
   var tqBad = pass < 4;
   var tooManyFlags = d.chgH24 < -40 || (d.liq < 5000 && d.liq > 0);
 
+  // Entry cần LỰC MUA THẬT: buy pressure mạnh + momentum ngắn hạn dương + không đang dump
+  var hasBuyMomentum = d.buyPressure >= 55 && totalTxns >= 10;
+  var shortPositive = (pm5 !== null && pm5 > 1) || (ph1 !== null && ph1 > 3);
+  var shortDumping = pm5 !== null && pm5 < -8; // m5 dump mạnh → không entry
+  var h1SellingMore = (buysH1 + sellsH1) > 10 && sellsH1 > buysH1 * 1.1; // lực bán h1 > mua
+  var isEntryWorthy = hasBuyMomentum && shortPositive && !shortDumping && !h1SellingMore && pass >= 5 && !qualityWeak;
+
   if (isDead || h24Crash || h6Crash || (midDump && shortDump) || (tqBad && tooManyFlags) || (multiTFWeak && tqBad)) {
     d.zone = 'danger'; d.zoneLabel = isDead ? 'DEAD' : 'NGUY HIỂM'; d.zoneIcon = '🔴';
-  } else if (postPumpCrash || postPeakRetrace || ((midPump || bigPump) && (retracing || shortDump || volDying))) {
-    d.zone = 'takeprofit'; d.zoneLabel = postPumpCrash ? 'SẬP SAU PUMP' : 'CHỐT LỜI'; d.zoneIcon = '💰';
+  } else if (postPumpCrash) {
+    // Đã dump sau pump → caution, không phải chốt lời
+    d.zone = 'caution'; d.zoneLabel = 'SẬP SAU PUMP'; d.zoneIcon = '📉';
+  } else if (peakPump || bigPumpPeak || postMajorPump || ((midPump || bigPump) && volFading)) {
+    // Chốt lời: đang ở ĐỈNH hoặc post-pump consolidation, nên chốt lời
+    d.zone = 'takeprofit'; d.zoneLabel = postMajorPump ? 'ĐÃ PUMP — CHỐT' : 'CHỐT LỜI'; d.zoneIcon = '💰';
   } else if (ph24 < -20 || (h1Dump && ph24 < -10) || multiTFWeak) {
     d.zone = 'caution'; d.zoneLabel = 'ĐANG GIẢM'; d.zoneIcon = '📉';
   } else if (shortPump || midPump) {
     d.zone = 'hold'; d.zoneLabel = 'GIỮ'; d.zoneIcon = '⚡';
   } else if (isDyingMom) {
     d.zone = 'caution'; d.zoneLabel = 'ĐANG TỤT'; d.zoneIcon = '📉';
+  } else if (isEntryWorthy) {
+    // ENTRY: chỉ khi có lực mua mạnh + momentum dương thực sự
+    d.zone = 'entry'; d.zoneLabel = 'ENTRY'; d.zoneIcon = '🟢';
   } else if (qualityWeak || tooManyFlags || ph24 < -10) {
     d.zone = 'caution'; d.zoneLabel = ph24 < -10 ? 'GIẢM NHẸ' : 'CẨN THẬN'; d.zoneIcon = '⚠️';
   } else {
-    d.zone = 'entry'; d.zoneLabel = 'ENTRY'; d.zoneIcon = '🟢';
+    // Coin bình thường, không có tín hiệu mạnh → theo dõi
+    d.zone = 'caution'; d.zoneLabel = 'TRUNG TÍNH'; d.zoneIcon = '⚠️';
   }
 
   d.error = false;
@@ -550,8 +570,8 @@ function renderBubbles() {
     if (c.zone === 'danger' && c.zoneLabel === 'DEAD') continue;
     if (c.error) continue;
 
-    // Vùng "đáng chú ý": ENTRY lên đầu, hoặc notable + không nguy hiểm
-    if (c.zone === 'entry' || (c.notable && c.zone !== 'danger' && c.zone !== 'caution')) {
+    // Vùng "đáng chú ý": ENTRY (lực mua mạnh) + HOLD (đang tăng)
+    if (c.zone === 'entry' || c.zone === 'hold') {
       notableCoins.push(c);
     } else {
       otherCoins.push(c);
