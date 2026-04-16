@@ -189,22 +189,22 @@ var MAX_TOKENS = 150;
 var REFRESH_INTERVAL = 30000;
 var SUPABASE_URL = '';
 var SUPABASE_KEY = '';
-var METROPIO_ORIGIN = 'https://metropio.trading';
+var SIGNAL_ORIGIN = 'https://metropio.trading';
 
 // CORS proxy
 function corsProxy(url) {
   return 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url);
 }
 
-// Tự động lấy Supabase URL + anon key từ JS bundle của Metropio
+// Tự động lấy Supabase URL + anon key từ JS bundle
 function extractSupabaseConfig() {
-  return fetch(corsProxy(METROPIO_ORIGIN + '/'))
+  return fetch(corsProxy(SIGNAL_ORIGIN + '/'))
     .then(function(r) { return r.ok ? r.text() : Promise.reject('Fetch HTML failed: ' + r.status); })
     .then(function(html) {
       // Tìm JS bundle: src="/assets/index-XXXX.js"
       var m = html.match(/src="(\/assets\/index-[^"]+\.js)"/);
       if (!m) return Promise.reject('Không tìm thấy JS bundle');
-      return fetch(corsProxy(METROPIO_ORIGIN + m[1])).then(function(r) {
+      return fetch(corsProxy(SIGNAL_ORIGIN + m[1])).then(function(r) {
         return r.ok ? r.text() : Promise.reject('Fetch JS failed: ' + r.status);
       });
     })
@@ -225,6 +225,8 @@ var paused = false;
 var refreshTimer = null;
 var timerStart = 0;
 var timerRAF = null;
+var activeSignalAddresses = []; // TRACKING tokens
+var signalMetadata = {}; // exit_signal, composite_score, etc.
 
 var FIXED_TOKENS = [];
 
@@ -248,7 +250,8 @@ function loadCache() {
 
 // ===== FETCH SIGNAL ADDRESSES TỪ SUPABASE =====
 function fetchSignalAddresses() {
-  return fetch(SUPABASE_URL + '/signal_history?select=token_address&order=detected_at.desc&limit=' + MAX_TOKENS, {
+  // Fetch ALL signals with status to separate TRACKING vs COMPLETED
+  return fetch(SUPABASE_URL + '/signal_history?select=token_address,status,exit_signal,bullish_probability,composite_score,token_symbol,token_name,detected_at,entry_price,entry_market_cap,entry_liquidity&order=detected_at.desc&limit=' + MAX_TOKENS, {
     headers: {
       'apikey': SUPABASE_KEY,
       'Authorization': 'Bearer ' + SUPABASE_KEY,
@@ -258,9 +261,24 @@ function fetchSignalAddresses() {
   .then(function(res) { return res.ok ? res.json() : []; })
   .then(function(data) {
     var addrs = [];
+    activeSignalAddresses = [];
+    signalMetadata = {};
     for (var i = 0; i < data.length; i++) {
-      if (data[i].token_address) addrs.push(data[i].token_address);
+      var d = data[i];
+      if (d.token_address) {
+        addrs.push(d.token_address);
+        signalMetadata[d.token_address] = {
+          status: d.status,
+          exitSignal: d.exit_signal,
+          probability: d.bullish_probability,
+          compositeScore: d.composite_score
+        };
+        if (d.status === 'TRACKING') {
+          activeSignalAddresses.push(d.token_address);
+        }
+      }
     }
+    console.log('Active signals (TRACKING):', activeSignalAddresses.length, activeSignalAddresses);
     return addrs;
   })
   .catch(function() { return []; });
@@ -292,7 +310,7 @@ function fetchTrending() {
 
 // ===== INIT =====
 (function() {
-  document.getElementById('statusText').textContent = 'Đang lấy config từ Metropio...';
+  document.getElementById('statusText').textContent = 'Đang lấy config...';
   showLoading();
   extractSupabaseConfig().then(function() {
     var cache = loadCache();
@@ -562,20 +580,47 @@ function renderBubbles() {
   // Thứ tự: ENTRY > Chốt lời > Hold > Cẩn thận > Nguy hiểm
   var zoneOrder = { entry: 0, takeprofit: 1, hold: 2, caution: 3, danger: 4, unknown: 5 };
 
+  // Build set of active signal addresses for O(1) lookup
+  var activeSet = {};
+  for (var k = 0; k < activeSignalAddresses.length; k++) {
+    activeSet[activeSignalAddresses[k]] = true;
+  }
+
   for (var i = 0; i < tokenAddresses.length; i++) {
     var a = tokenAddresses[i];
     var c = coinData[a];
     if (!c) continue;
-    // Ẩn DEAD tokens
+
+    // Active Signals = status TRACKING — luôn hiển thị, không skip
+    var isActive = activeSet[a];
+    if (isActive) {
+      // Ghi đè zone bằng exit_signal (BUY, HOLD, RESEARCH...)
+      var meta = signalMetadata[a];
+      if (meta && meta.exitSignal) {
+        var sig = meta.exitSignal;
+        if (sig === 'BUY') {
+          c.zone = 'entry'; c.zoneLabel = 'BUY'; c.zoneIcon = '🟢';
+        } else if (sig === 'HOLD') {
+          c.zone = 'hold'; c.zoneLabel = 'HOLD'; c.zoneIcon = '⚡';
+        } else if (sig === 'RESEARCH') {
+          c.zone = 'caution'; c.zoneLabel = 'RESEARCH'; c.zoneIcon = '🔍';
+        } else if (sig === 'TAKE_PROFIT') {
+          c.zone = 'takeprofit'; c.zoneLabel = 'TAKE PROFIT'; c.zoneIcon = '💰';
+        } else if (sig === 'STOP_LOSS') {
+          c.zone = 'danger'; c.zoneLabel = 'STOP LOSS'; c.zoneIcon = '🔴';
+        } else {
+          c.zoneLabel = sig; c.zoneIcon = '📡';
+        }
+      }
+      notableCoins.push(c);
+      continue;
+    }
+
+    // Chỉ ẩn DEAD/error cho coin KHÔNG phải active signal
     if (c.zone === 'danger' && c.zoneLabel === 'DEAD') continue;
     if (c.error) continue;
 
-    // Vùng "đáng chú ý": ENTRY (lực mua mạnh) + HOLD (đang tăng)
-    if (c.zone === 'entry' || c.zone === 'hold') {
-      notableCoins.push(c);
-    } else {
-      otherCoins.push(c);
-    }
+    otherCoins.push(c);
   }
 
   // Sort notable: Entry first, then by grade
@@ -669,7 +714,7 @@ function makeBubbleHTML(c) {
     + '<div class="bubble-grade" style="color:' + zc + '">' + c.grade + ' ' + c.notablePass + '/10</div>'
     + '<div class="bubble-actions">'
     + '<button class="btn-view-dex" onclick="event.stopPropagation();window.open(\'' + escapedDexUrl + '\',\'_blank\')">🔗 View Dex</button>'
-    + '<button class="btn-copy-name" onclick="event.stopPropagation();copyName(this,\'' + escapedSymbol + '\')">📋 Copy Name</button>'
+    + '<button class="btn-copy-name" onclick="event.stopPropagation();copyName(this,\'' + (c.address || '').replace(/'/g, "\\'") + '\')">📋 Copy</button>'
     + '</div>'
     + '</div>';
   return html;
@@ -679,14 +724,14 @@ function copyName(btn, name) {
   navigator.clipboard.writeText(name).then(function() {
     btn.textContent = '✅ Copied!';
     btn.classList.add('copied');
-    setTimeout(function() { btn.textContent = '📋 Copy Name'; btn.classList.remove('copied'); }, 1500);
+    setTimeout(function() { btn.textContent = '📋 Copy'; btn.classList.remove('copied'); }, 1500);
   }).catch(function() {
     // Fallback
     var ta = document.createElement('textarea');
     ta.value = name; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
     btn.textContent = '✅ Copied!';
     btn.classList.add('copied');
-    setTimeout(function() { btn.textContent = '📋 Copy Name'; btn.classList.remove('copied'); }, 1500);
+    setTimeout(function() { btn.textContent = '📋 Copy'; btn.classList.remove('copied'); }, 1500);
   });
 }
 

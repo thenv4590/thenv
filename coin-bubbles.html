@@ -187,6 +187,12 @@
 // ===== CONFIG =====
 var MAX_TOKENS = 150;
 var REFRESH_INTERVAL = 30000;
+var SIGNAL_ORIGIN = 'https://metropio.trading';
+var SUPABASE_URL = '';
+var SUPABASE_KEY = '';
+var activeSignalAddresses = [];
+var signalMetadata = {};
+
 var tokenAddresses = [];
 var coinData = {};
 var paused = false;
@@ -298,6 +304,47 @@ var FIXED_TOKENS = [
   'D55RcS7ocJhd1BXTmiuE3LBvJz1KxrRbjqvHFiaXpump'
 ];
 
+// ===== Extract Supabase config & fetch active signals =====
+function corsProxy(url) {
+  return 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url);
+}
+function extractSupabaseConfig() {
+  return fetch(corsProxy(SIGNAL_ORIGIN + '/'))
+    .then(function(r) { return r.ok ? r.text() : Promise.reject('Fetch HTML failed'); })
+    .then(function(html) {
+      var m = html.match(/src="(\/assets\/index-[^"]+\.js)"/);
+      if (!m) return Promise.reject('Không tìm thấy JS bundle');
+      return fetch(corsProxy(SIGNAL_ORIGIN + m[1])).then(function(r) { return r.ok ? r.text() : Promise.reject('Fetch JS failed'); });
+    })
+    .then(function(js) {
+      var urlMatch = js.match(/https:\/\/[a-z0-9]+\.supabase\.co/);
+      var keyMatch = js.match(/eyJhbGci[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+/);
+      if (!urlMatch || !keyMatch) return Promise.reject('Không extract được config');
+      SUPABASE_URL = urlMatch[0] + '/rest/v1';
+      SUPABASE_KEY = keyMatch[0];
+    });
+}
+function fetchActiveSignals() {
+  if (!SUPABASE_URL) return Promise.resolve();
+  return fetch(SUPABASE_URL + '/signal_history?status=eq.TRACKING&select=token_address,status,exit_signal,bullish_probability,composite_score&order=detected_at.desc', {
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Accept-Profile': 'public' }
+  })
+  .then(function(res) { return res.ok ? res.json() : []; })
+  .then(function(data) {
+    activeSignalAddresses = [];
+    signalMetadata = {};
+    for (var i = 0; i < data.length; i++) {
+      var d = data[i];
+      if (d.token_address) {
+        activeSignalAddresses.push(d.token_address);
+        signalMetadata[d.token_address] = { exitSignal: d.exit_signal, probability: d.bullish_probability, compositeScore: d.composite_score };
+      }
+    }
+    console.log('Active signals:', activeSignalAddresses.length);
+  })
+  .catch(function() { console.log('Signal fetch failed'); });
+}
+
 // ===== CACHE (localStorage) =====
 function saveCache() {
   try {
@@ -383,18 +430,26 @@ function fetchTrending() {
 
 // ===== INIT =====
 (function() {
-  var cache = loadCache();
-  if (cache) {
-    tokenAddresses = cache.tokens;
-    coinData = cache.data;
-    renderBubbles();
-    var age = Math.round((Date.now() - parseInt(localStorage.getItem('cb_time') || '0')) / 1000);
-    document.getElementById('statusText').textContent = 'Cache ' + age + 's trước — ' + tokenAddresses.length + ' token — đang cập nhật...';
-    setTimeout(fetchTrending, 500);
-  } else {
-    showLoading();
-    fetchTrending();
-  }
+  document.getElementById('statusText').textContent = 'Đang lấy config...';
+  // Lấy config song song với cache/trending
+  extractSupabaseConfig().then(function() {
+    return fetchActiveSignals();
+  }).catch(function() {
+    console.log('Config failed — tiếp tục không có signal');
+  }).then(function() {
+    var cache = loadCache();
+    if (cache) {
+      tokenAddresses = cache.tokens;
+      coinData = cache.data;
+      renderBubbles();
+      var age = Math.round((Date.now() - parseInt(localStorage.getItem('cb_time') || '0')) / 1000);
+      document.getElementById('statusText').textContent = 'Cache ' + age + 's trước — ' + tokenAddresses.length + ' token — đang cập nhật...';
+      setTimeout(fetchTrending, 500);
+    } else {
+      showLoading();
+      fetchTrending();
+    }
+  });
 })();
 
 // ===== PAUSE =====
@@ -439,11 +494,14 @@ function fetchAllTokens() {
           coinData[a] = { symbol: a.substring(0,6) + '...', zone: 'unknown', notable: false, error: true };
         }
       }
-      renderBubbles();
-      saveCache();
-      var now = new Date();
-      document.getElementById('statusText').textContent = 'Cập nhật: ' + now.toLocaleTimeString() + ' — ' + Object.keys(byToken).length + '/' + tokenAddresses.length + ' token';
-      scheduleRefresh();
+      // Refresh active signals trước khi render
+      fetchActiveSignals().then(function() {
+        renderBubbles();
+        saveCache();
+        var now = new Date();
+        document.getElementById('statusText').textContent = 'Cập nhật: ' + now.toLocaleTimeString() + ' — ' + Object.keys(byToken).length + '/' + tokenAddresses.length + ' token';
+        scheduleRefresh();
+      });
       return;
     }
 
@@ -644,15 +702,38 @@ function renderBubbles() {
   // Thứ tự: ENTRY > Chốt lời > Hold > Cẩn thận > Nguy hiểm
   var zoneOrder = { entry: 0, takeprofit: 1, hold: 2, caution: 3, danger: 4, unknown: 5 };
 
+  // Build set of active signal addresses
+  var activeSet = {};
+  for (var k = 0; k < activeSignalAddresses.length; k++) {
+    activeSet[activeSignalAddresses[k]] = true;
+  }
+
   for (var i = 0; i < tokenAddresses.length; i++) {
     var a = tokenAddresses[i];
     var c = coinData[a];
     if (!c) continue;
-    // Ẩn DEAD tokens
+
+    // Active signals — luôn hiển thị, ghi đè zone
+    var isActive = activeSet[a];
+    if (isActive) {
+      var meta = signalMetadata[a];
+      if (meta && meta.exitSignal) {
+        var sig = meta.exitSignal;
+        if (sig === 'BUY') { c.zone = 'entry'; c.zoneLabel = 'BUY'; c.zoneIcon = '🟢'; }
+        else if (sig === 'HOLD') { c.zone = 'hold'; c.zoneLabel = 'HOLD'; c.zoneIcon = '⚡'; }
+        else if (sig === 'RESEARCH') { c.zone = 'caution'; c.zoneLabel = 'RESEARCH'; c.zoneIcon = '🔍'; }
+        else if (sig === 'TAKE_PROFIT') { c.zone = 'takeprofit'; c.zoneLabel = 'TAKE PROFIT'; c.zoneIcon = '💰'; }
+        else if (sig === 'STOP_LOSS') { c.zone = 'danger'; c.zoneLabel = 'STOP LOSS'; c.zoneIcon = '🔴'; }
+        else { c.zoneLabel = sig; c.zoneIcon = '📡'; }
+      }
+      notableCoins.push(c);
+      continue;
+    }
+
+    // Ẩn DEAD/error cho coin không phải active signal
     if (c.zone === 'danger' && c.zoneLabel === 'DEAD') continue;
     if (c.error) continue;
 
-    // Vùng "đáng chú ý": ENTRY (lực mua mạnh) + HOLD (đang tăng)
     if (c.zone === 'entry' || c.zone === 'hold') {
       notableCoins.push(c);
     } else {
@@ -751,7 +832,7 @@ function makeBubbleHTML(c) {
     + '<div class="bubble-grade" style="color:' + zc + '">' + c.grade + ' ' + c.notablePass + '/10</div>'
     + '<div class="bubble-actions">'
     + '<button class="btn-view-dex" onclick="event.stopPropagation();window.open(\'' + escapedDexUrl + '\',\'_blank\')">🔗 View Dex</button>'
-    + '<button class="btn-copy-name" onclick="event.stopPropagation();copyName(this,\'' + escapedSymbol + '\')">📋 Copy Name</button>'
+    + '<button class="btn-copy-name" onclick="event.stopPropagation();copyName(this,\'' + (c.address || '').replace(/'/g, "\\'") + '\')">📋 Copy</button>'
     + '</div>'
     + '</div>';
   return html;
@@ -761,14 +842,14 @@ function copyName(btn, name) {
   navigator.clipboard.writeText(name).then(function() {
     btn.textContent = '✅ Copied!';
     btn.classList.add('copied');
-    setTimeout(function() { btn.textContent = '📋 Copy Name'; btn.classList.remove('copied'); }, 1500);
+    setTimeout(function() { btn.textContent = '📋 Copy'; btn.classList.remove('copied'); }, 1500);
   }).catch(function() {
     // Fallback
     var ta = document.createElement('textarea');
     ta.value = name; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
     btn.textContent = '✅ Copied!';
     btn.classList.add('copied');
-    setTimeout(function() { btn.textContent = '📋 Copy Name'; btn.classList.remove('copied'); }, 1500);
+    setTimeout(function() { btn.textContent = '📋 Copy'; btn.classList.remove('copied'); }, 1500);
   });
 }
 
